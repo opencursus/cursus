@@ -189,7 +189,12 @@ export function ImportAccountsModal({ existing, onClose, onImported }: Props) {
               <Button variant="ghost" onClick={onClose} disabled={busy}>
                 Cancel
               </Button>
-              <Button variant="primary" onClick={decrypt} disabled={busy}>
+              <Button
+                variant="primary"
+                onClick={decrypt}
+                disabled={busy}
+                className="min-w-[120px]"
+              >
                 {busy ? "Decrypting…" : "Continue"}
               </Button>
             </div>
@@ -240,6 +245,7 @@ export function ImportAccountsModal({ existing, onClose, onImported }: Props) {
                 leading={<Upload size={14} />}
                 onClick={performImport}
                 disabled={busy}
+                className="min-w-[120px]"
               >
                 {busy ? "Importing…" : "Import"}
               </Button>
