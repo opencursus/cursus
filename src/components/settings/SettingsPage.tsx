@@ -336,6 +336,12 @@ function GeneralSection() {
   const setSyncIntervalMs = useUiStore((s) => s.setSyncIntervalMs);
   const notificationsEnabled = useUiStore((s) => s.notificationsEnabled);
   const setNotificationsEnabled = useUiStore((s) => s.setNotificationsEnabled);
+  const quietHoursEnabled = useUiStore((s) => s.quietHoursEnabled);
+  const setQuietHoursEnabled = useUiStore((s) => s.setQuietHoursEnabled);
+  const quietHoursStart = useUiStore((s) => s.quietHoursStart);
+  const setQuietHoursStart = useUiStore((s) => s.setQuietHoursStart);
+  const quietHoursEnd = useUiStore((s) => s.quietHoursEnd);
+  const setQuietHoursEnd = useUiStore((s) => s.setQuietHoursEnd);
   const taskbarBadgeEnabled = useUiStore((s) => s.taskbarBadgeEnabled);
   const setTaskbarBadgeEnabled = useUiStore((s) => s.setTaskbarBadgeEnabled);
   const remoteImages = useUiStore((s) => s.remoteImages);
@@ -384,6 +390,41 @@ function GeneralSection() {
             { value: "off", label: "Off" },
           ]}
         />
+      </Row>
+
+      <Row
+        label="Quiet hours"
+        hint="Suppress notifications during this window. The range may wrap past midnight (e.g. 22:00 to 08:00)."
+      >
+        <div className="flex items-center gap-2">
+          <SegmentedGroup<string>
+            value={quietHoursEnabled ? "on" : "off"}
+            onChange={(v) => setQuietHoursEnabled(v === "on")}
+            options={[
+              { value: "on", label: "On" },
+              { value: "off", label: "Off" },
+            ]}
+          />
+          {quietHoursEnabled && (
+            <>
+              <input
+                type="time"
+                value={quietHoursStart}
+                onChange={(e) => setQuietHoursStart(e.target.value)}
+                className="rounded-md border bg-transparent px-2 py-1 text-[12.5px] text-primary outline-none focus:border-[color:var(--accent)]"
+                style={{ borderColor: "var(--border-strong)" }}
+              />
+              <span className="text-muted">–</span>
+              <input
+                type="time"
+                value={quietHoursEnd}
+                onChange={(e) => setQuietHoursEnd(e.target.value)}
+                className="rounded-md border bg-transparent px-2 py-1 text-[12.5px] text-primary outline-none focus:border-[color:var(--accent)]"
+                style={{ borderColor: "var(--border-strong)" }}
+              />
+            </>
+          )}
+        </div>
       </Row>
 
       <Row

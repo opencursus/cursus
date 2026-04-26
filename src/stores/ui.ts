@@ -16,6 +16,9 @@ const KEY_CLOSE_TO_TRAY = "close_to_tray";
 const KEY_UNDO_SEND_SEC = "undo_send_seconds";
 const KEY_CONFIRM_SEND = "confirm_before_send";
 const KEY_DONT_MARK_READ = "dont_mark_read_on_open";
+const KEY_QUIET_HOURS_ENABLED = "quiet_hours_enabled";
+const KEY_QUIET_HOURS_START = "quiet_hours_start";
+const KEY_QUIET_HOURS_END = "quiet_hours_end";
 
 const LIST_WIDTH_MIN = 320;
 const LIST_WIDTH_MAX = 720;
@@ -50,6 +53,11 @@ interface UiState {
   undoSendSeconds: number;
   confirmBeforeSend: boolean;
   dontMarkReadOnOpen: boolean;
+  quietHoursEnabled: boolean;
+  /** "HH:MM", local time. Inclusive at start. */
+  quietHoursStart: string;
+  /** "HH:MM", local time. Exclusive at end. Window may wrap past midnight. */
+  quietHoursEnd: string;
   searchOpen: boolean;
   /** Thread id awaiting a destination via the move-to-folder picker. Null
    *  when the picker is closed. */
@@ -80,6 +88,9 @@ interface UiState {
   setUndoSendSeconds: (sec: number) => void;
   setConfirmBeforeSend: (on: boolean) => void;
   setDontMarkReadOnOpen: (on: boolean) => void;
+  setQuietHoursEnabled: (on: boolean) => void;
+  setQuietHoursStart: (hhmm: string) => void;
+  setQuietHoursEnd: (hhmm: string) => void;
   openSearch: () => void;
   closeSearch: () => void;
   openMove: (threadId: number) => void;
@@ -136,6 +147,9 @@ export const useUiStore = create<UiState>((set) => ({
   undoSendSeconds: 5,
   confirmBeforeSend: true,
   dontMarkReadOnOpen: false,
+  quietHoursEnabled: false,
+  quietHoursStart: "22:00",
+  quietHoursEnd: "08:00",
   searchOpen: false,
   moveTargetThreadId: null,
   listFilter: "all",
@@ -228,6 +242,18 @@ export const useUiStore = create<UiState>((set) => ({
     persist(KEY_DONT_MARK_READ, on ? "1" : "0");
     set({ dontMarkReadOnOpen: on });
   },
+  setQuietHoursEnabled: (on) => {
+    persist(KEY_QUIET_HOURS_ENABLED, on ? "1" : "0");
+    set({ quietHoursEnabled: on });
+  },
+  setQuietHoursStart: (hhmm) => {
+    persist(KEY_QUIET_HOURS_START, hhmm);
+    set({ quietHoursStart: hhmm });
+  },
+  setQuietHoursEnd: (hhmm) => {
+    persist(KEY_QUIET_HOURS_END, hhmm);
+    set({ quietHoursEnd: hhmm });
+  },
   setConfirmBeforeSend: (on) => {
     persist(KEY_CONFIRM_SEND, on ? "1" : "0");
     set({ confirmBeforeSend: on });
@@ -277,6 +303,16 @@ function parseRemoteImages(v: string | null): RemoteImagesPolicy | null {
   return null;
 }
 
+function parseHhmm(v: string | null): string | null {
+  if (!v) return null;
+  const m = v.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+}
+
 function parseUndoSendSeconds(v: string | null): number | null {
   if (v == null) return null;
   const n = Number(v);
@@ -302,6 +338,9 @@ export async function initializeUi(): Promise<void> {
       KEY_LAUNCH_AT_LOGIN,
       KEY_CLOSE_TO_TRAY,
       KEY_DONT_MARK_READ,
+      KEY_QUIET_HOURS_ENABLED,
+      KEY_QUIET_HOURS_START,
+      KEY_QUIET_HOURS_END,
       KEY_UNDO_SEND_SEC,
       KEY_CONFIRM_SEND,
     ]);
@@ -350,6 +389,17 @@ export async function initializeUi(): Promise<void> {
   const dmrStored = stored[KEY_DONT_MARK_READ];
   const dontMarkReadOnOpen =
     dmrStored == null ? useUiStore.getState().dontMarkReadOnOpen : dmrStored === "1";
+  const qhEnStored = stored[KEY_QUIET_HOURS_ENABLED];
+  const quietHoursEnabled =
+    qhEnStored == null
+      ? useUiStore.getState().quietHoursEnabled
+      : qhEnStored === "1";
+  const quietHoursStart =
+    parseHhmm(stored[KEY_QUIET_HOURS_START] ?? null) ??
+    useUiStore.getState().quietHoursStart;
+  const quietHoursEnd =
+    parseHhmm(stored[KEY_QUIET_HOURS_END] ?? null) ??
+    useUiStore.getState().quietHoursEnd;
 
   useUiStore.setState({
     theme,
@@ -366,6 +416,9 @@ export async function initializeUi(): Promise<void> {
     undoSendSeconds,
     confirmBeforeSend,
     dontMarkReadOnOpen,
+    quietHoursEnabled,
+    quietHoursStart,
+    quietHoursEnd,
   });
   applyTheme(theme);
 }
