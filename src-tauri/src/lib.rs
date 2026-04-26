@@ -1,3 +1,4 @@
+mod backup;
 mod badge;
 mod badge_data;
 mod commands;
@@ -142,6 +143,8 @@ pub fn run() {
             commands::app_quit,
             commands::imap_idle_start,
             commands::imap_idle_stop,
+            commands::backup_seal,
+            commands::backup_unseal,
             get_database_url,
         ])
         .run(tauri::generate_context!())

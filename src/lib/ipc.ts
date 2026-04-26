@@ -228,6 +228,11 @@ export const ipc = {
     invoke<void>("imap_idle_stop", { accountId, folder }),
 
   getDatabaseUrl: () => invoke<string>("get_database_url"),
+
+  backupSeal: (password: string, plaintext: string) =>
+    invoke<string>("backup_seal", { password, plaintext }),
+  backupUnseal: (password: string, blob: string) =>
+    invoke<string>("backup_unseal", { password, blob }),
 };
 
 /** Payload of the `imap-update` event emitted from the Rust IDLE loop. */

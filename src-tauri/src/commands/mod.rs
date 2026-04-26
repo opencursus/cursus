@@ -34,6 +34,16 @@ pub fn app_quit(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+pub fn backup_seal(password: String, plaintext: String) -> std::result::Result<String, String> {
+    crate::backup::seal(&password, &plaintext)
+}
+
+#[tauri::command]
+pub fn backup_unseal(password: String, blob: String) -> std::result::Result<String, String> {
+    crate::backup::unseal(&password, &blob)
+}
+
+#[tauri::command]
 pub async fn window_set_unread_badge(app: tauri::AppHandle, count: u32) -> Result<()> {
     use tauri::Manager;
     log::info!("window_set_unread_badge(count={count}) invoked");

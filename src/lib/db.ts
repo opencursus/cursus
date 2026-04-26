@@ -215,6 +215,102 @@ export async function updateAccount(id: number, input: AccountInput): Promise<vo
   }
 }
 
+// --- Backup bundle (export/import accounts) ------------------------------
+
+export interface AccountBundleEntry {
+  email: string;
+  displayName: string;
+  color: string;
+  imap: {
+    host: string;
+    port: number;
+    security: "ssl" | "starttls" | "none";
+    username: string;
+    password: string;
+  };
+  sendingMode: "smtp" | "resend";
+  smtp?: {
+    host: string;
+    port: number;
+    security: "ssl" | "starttls" | "none";
+    username: string;
+    password: string;
+  };
+  resend?: {
+    apiKey: string;
+    fromAddress: string;
+  };
+  signatureHtml?: string;
+}
+
+export interface AccountsBundle {
+  version: 1;
+  exportedAt: number;
+  accounts: AccountBundleEntry[];
+}
+
+/**
+ * Build a self-contained bundle (with secrets) for the given account ids.
+ * Hits the keychain via `getAccountSecrets`, so callers should expect a
+ * round-trip per account.
+ */
+export async function buildAccountsBundle(
+  accountIds: number[],
+): Promise<AccountsBundle> {
+  const all = await listAccounts();
+  const wanted = all.filter((a) => accountIds.includes(a.id));
+  const items: AccountBundleEntry[] = [];
+  for (const a of wanted) {
+    const secrets = await getAccountSecrets(a.id);
+    const entry: AccountBundleEntry = {
+      email: a.email,
+      displayName: a.display_name ?? "",
+      color: a.color ?? "",
+      imap: {
+        host: a.imap_host,
+        port: a.imap_port,
+        security: a.imap_security,
+        username: a.imap_username ?? a.email,
+        password: secrets.imapPassword,
+      },
+      sendingMode: a.smtp_mode,
+    };
+    if (a.smtp_mode === "smtp" && a.smtp_host && a.smtp_port && a.smtp_security) {
+      entry.smtp = {
+        host: a.smtp_host,
+        port: a.smtp_port,
+        security: a.smtp_security,
+        username: a.smtp_username ?? a.email,
+        password: secrets.smtpPassword ?? "",
+      };
+    }
+    if (a.smtp_mode === "resend") {
+      entry.resend = {
+        apiKey: secrets.resendApiKey ?? "",
+        fromAddress: a.resend_from_address ?? "",
+      };
+    }
+    if (a.signature_html) entry.signatureHtml = a.signature_html;
+    items.push(entry);
+  }
+  return { version: 1, exportedAt: Math.floor(Date.now() / 1000), accounts: items };
+}
+
+/** Convert a bundle entry into the AccountInput shape that
+ *  `insertAccount` / `updateAccount` consume. */
+export function entryToAccountInput(e: AccountBundleEntry): AccountInput {
+  return {
+    email: e.email,
+    displayName: e.displayName,
+    color: e.color,
+    imap: e.imap,
+    sendingMode: e.sendingMode,
+    smtp: e.smtp,
+    resend: e.resend,
+    signatureHtml: e.signatureHtml,
+  };
+}
+
 export async function deleteAccount(id: number): Promise<void> {
   const db = await getDb();
   await db.execute("DELETE FROM accounts WHERE id = $1", [id]);

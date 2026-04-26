@@ -11,6 +11,8 @@ import {
   Info,
   Mail as MailIcon,
   Filter,
+  Download,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
@@ -31,6 +33,8 @@ import {
 } from "@/lib/db";
 import type { RuleAction, RuleCondition, RuleField, RuleOp } from "@/lib/rules";
 import { AccountForm } from "@/components/settings/AccountForm";
+import { ExportAccountsModal } from "@/components/settings/ExportAccountsModal";
+import { ImportAccountsModal } from "@/components/settings/ImportAccountsModal";
 import type { Theme, ReadingPane } from "@/types";
 
 type SectionId = "accounts" | "appearance" | "general" | "rules" | "keyboard" | "about";
@@ -139,6 +143,8 @@ function AccountsSection() {
   const [accounts, setAccounts] = useState<StoredAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showExport, setShowExport] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -205,18 +211,52 @@ function AccountsSection() {
             Add the IMAP + SMTP or Resend credentials for each of your accounts.
           </p>
         </div>
-        <Button
-          variant="primary"
-          leading={<Plus size={14} />}
-          className="min-w-[180px]"
-          onClick={() => {
-            setEditingAccount(null);
-            setMode("form");
-          }}
-        >
-          Add account
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            leading={<Upload size={14} />}
+            onClick={() => setShowImport(true)}
+          >
+            Import…
+          </Button>
+          <Button
+            variant="ghost"
+            leading={<Download size={14} />}
+            onClick={() => setShowExport(true)}
+            disabled={accounts.length === 0}
+          >
+            Export…
+          </Button>
+          <Button
+            variant="primary"
+            leading={<Plus size={14} />}
+            className="min-w-[180px]"
+            onClick={() => {
+              setEditingAccount(null);
+              setMode("form");
+            }}
+          >
+            Add account
+          </Button>
+        </div>
       </div>
+
+      {showExport && (
+        <ExportAccountsModal
+          accounts={accounts}
+          onClose={() => setShowExport(false)}
+        />
+      )}
+      {showImport && (
+        <ImportAccountsModal
+          existing={accounts}
+          onClose={() => setShowImport(false)}
+          onImported={async () => {
+            await refresh();
+            await useAccountsStore.getState().loadAccounts();
+          }}
+        />
+      )}
 
       {error && (
         <div className="rounded-lg border border-[color:var(--color-danger)] bg-[color:rgba(229,72,77,0.08)] text-[12.5px] text-[color:var(--color-danger)] px-3 py-2 mb-4">
