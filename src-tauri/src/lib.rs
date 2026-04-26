@@ -34,6 +34,26 @@ fn resolve_data_dir() -> PathBuf {
     let exe_dir = exe.parent().expect("exe parent").to_path_buf();
     let data_dir = exe_dir.join("cursus-files");
     std::fs::create_dir_all(&data_dir).expect("create cursus-files");
+
+    // One-shot migration for users upgrading from a "flow.db"-era build.
+    // Rename the SQLite main file plus its WAL/SHM siblings, but only if
+    // the new name doesn't already exist (don't clobber a fresh DB).
+    let new_db = data_dir.join("cursus.db");
+    let old_db = data_dir.join("flow.db");
+    if old_db.exists() && !new_db.exists() {
+        let _ = std::fs::rename(&old_db, &new_db);
+        for (old_name, new_name) in [
+            ("flow.db-wal", "cursus.db-wal"),
+            ("flow.db-shm", "cursus.db-shm"),
+        ] {
+            let oldp = data_dir.join(old_name);
+            let newp = data_dir.join(new_name);
+            if oldp.exists() && !newp.exists() {
+                let _ = std::fs::rename(&oldp, &newp);
+            }
+        }
+    }
+
     data_dir
 }
 
@@ -44,7 +64,7 @@ fn get_database_url(state: tauri::State<'_, DbUrl>) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let db_path = resolve_data_dir().join("flow.db");
+    let db_path = resolve_data_dir().join("cursus.db");
     // SQLx's sqlite URL parser accepts forward slashes on Windows; normalise
     // backslashes so the connection string is valid on every platform.
     let db_url = format!(

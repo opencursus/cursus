@@ -6,7 +6,7 @@ let cached: Database | null = null;
 export async function getDb(): Promise<Database> {
   if (!cached) {
     // The DB lives in a portable folder next to the executable
-    // (`<exe_dir>/cursus-files/flow.db`). The Rust side computes the absolute
+    // (`<exe_dir>/cursus-files/cursus.db`). The Rust side computes the absolute
     // SQLite URL at startup and registers migrations against it; we have to
     // load with the exact same string, hence the IPC round-trip.
     const url = await ipc.getDatabaseUrl();

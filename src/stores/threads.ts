@@ -16,7 +16,7 @@ import {
   type StoredMessage,
   type StoredRule,
 } from "@/lib/db";
-import { isSnoozedNow, snoozeKeyword } from "@/lib/snooze";
+import { isSnoozedNow, snoozeKeyword, SNOOZE_REMOVE_GLOBS } from "@/lib/snooze";
 import { ruleMatches, type RuleAction, type RuleSpec } from "@/lib/rules";
 import { useAccountsStore } from "@/stores/accounts";
 import { useUiStore } from "@/stores/ui";
@@ -90,7 +90,18 @@ const PAGE_SIZE = 50;
 // increments. The next IMAP fetch uses (pageCount - 1) * PAGE_SIZE as offset.
 const pageCountByFolder = new Map<string, number>();
 
-const IMPORTANT_KEYWORD = "Flow-Important";
+const IMPORTANT_KEYWORD = "Cursus-Important";
+/** Pre-rename keyword. We never write it, but we still recognise it on
+ *  fetch (so messages flagged in older builds keep showing as important)
+ *  and we strip it on toggle-off. */
+const LEGACY_IMPORTANT_KEYWORD = "Flow-Important";
+
+function flagsHaveImportant(flags: string[]): boolean {
+  return (
+    flags.includes(IMPORTANT_KEYWORD) ||
+    flags.includes(LEGACY_IMPORTANT_KEYWORD)
+  );
+}
 
 // In-memory map of max UID already seen per (account, folder), used to fire
 // a notification when fetchFolder surfaces a genuinely new unread message.
@@ -218,7 +229,7 @@ function threadFromGroup(
   const hasUnread = members.some((m) => !m.flags.includes("Seen"));
   // Star / important roll up the same way — any flagged member counts.
   const isPinned = members.some((m) => m.flags.includes("Flagged"));
-  const isImportant = members.some((m) => m.flags.includes(IMPORTANT_KEYWORD));
+  const isImportant = members.some((m) => flagsHaveImportant(m.flags));
   const hasAttachments = members.some((m) => m.hasAttachments);
 
   return {
@@ -243,7 +254,7 @@ function groupSummariesIntoThreads(
   accountId: number,
   folderId: number,
 ): Thread[] {
-  // Hide messages whose Flow-SnoozedUntil deadline is still in the future.
+  // Hide messages whose Cursus-SnoozedUntil deadline is still in the future.
   const visible = summaries.filter((s) => !isSnoozedNow(s.flags));
   const items = visible.map((s) => ({
     uid: s.uid,
@@ -498,7 +509,7 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
             flags: s.flags,
             isUnread: !s.flags.includes("Seen"),
             isStarred: s.flags.includes("Flagged"),
-            isImportant: s.flags.includes(IMPORTANT_KEYWORD),
+            isImportant: flagsHaveImportant(s.flags),
             hasAttachments: s.hasAttachments,
             isBulk: s.isBulk,
             isAuto: s.isAuto,
@@ -597,7 +608,7 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
             flags: s.flags,
             isUnread: !s.flags.includes("Seen"),
             isStarred: s.flags.includes("Flagged"),
-            isImportant: s.flags.includes(IMPORTANT_KEYWORD),
+            isImportant: flagsHaveImportant(s.flags),
             hasAttachments: s.hasAttachments,
             isBulk: s.isBulk,
             isAuto: s.isAuto,
@@ -683,7 +694,7 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
             flags: s.flags,
             isUnread: !s.flags.includes("Seen"),
             isStarred: s.flags.includes("Flagged"),
-            isImportant: s.flags.includes(IMPORTANT_KEYWORD),
+            isImportant: flagsHaveImportant(s.flags),
             hasAttachments: s.hasAttachments,
             isBulk: s.isBulk,
             isAuto: s.isAuto,
@@ -835,7 +846,9 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
         config,
         folderPath,
         thread.id,
-        [IMPORTANT_KEYWORD],
+        nextImportant
+          ? [IMPORTANT_KEYWORD]
+          : [IMPORTANT_KEYWORD, LEGACY_IMPORTANT_KEYWORD],
         nextImportant ? "add" : "remove",
       );
     } catch (err) {
@@ -881,11 +894,11 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
       const { config, folderPath } = await sessionFor(thread);
       // Without persisted flags we don't know the exact keyword string;
       // remove the family with a wildcard send. async-imap accepts any
-      // flag string in -FLAGS so we send `Flow-SnoozedUntil:*` which
+      // flag string in -FLAGS so we send `Cursus-SnoozedUntil:*` (and the
       // most servers accept as a literal — failing that the keyword
       // simply stays and gets cleared by the periodic checker once we
       // have flags.
-      await ipc.imapSetFlags(config, folderPath, thread.id, ["Flow-SnoozedUntil:*"], "remove").catch(() => {});
+      await ipc.imapSetFlags(config, folderPath, thread.id, SNOOZE_REMOVE_GLOBS, "remove").catch(() => {});
     } catch (err) {
       console.warn("unsnoozeThread failed:", err);
     }

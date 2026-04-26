@@ -142,7 +142,7 @@ export default function App() {
 
   // ── Snooze checker ──────────────────────────────────────────────────────
   // Every minute: walk persisted messages in every folder, find ones whose
-  // Flow-SnoozedUntil deadline has passed, and remove the keyword on the
+  // Cursus-SnoozedUntil deadline has passed, and remove the keyword on the
   // server. The next IMAP sync (or IDLE event) brings the message back into
   // the visible thread list automatically because the snooze filter then
   // returns false.

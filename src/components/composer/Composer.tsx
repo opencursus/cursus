@@ -90,7 +90,7 @@ export function Composer() {
       content: "<p></p>",
       editorProps: {
         attributes: {
-          class: "flow-editor outline-none min-h-[220px] px-4 py-3 text-[13px] leading-relaxed",
+          class: "cursus-editor outline-none min-h-[220px] px-4 py-3 text-[13px] leading-relaxed",
         },
       },
     },
@@ -763,18 +763,18 @@ export function Composer() {
       </div>
 
       <style>{`
-        .flow-editor p { margin: 0 0 0.6em 0; }
-        .flow-editor blockquote {
+        .cursus-editor p { margin: 0 0 0.6em 0; }
+        .cursus-editor blockquote {
           border-left: 3px solid var(--border-strong);
           margin: 0.6em 0;
           padding: 0 0 0 12px;
           color: var(--fg-secondary);
         }
-        .flow-editor ul, .flow-editor ol { margin: 0 0 0.6em 1.2em; padding: 0; }
-        .flow-editor h1, .flow-editor h2, .flow-editor h3 { margin: 0.8em 0 0.4em; font-weight: 600; }
-        .flow-editor a { color: var(--accent); text-decoration: none; }
-        .flow-editor a:hover { text-decoration: underline; }
-        .flow-editor code {
+        .cursus-editor ul, .cursus-editor ol { margin: 0 0 0.6em 1.2em; padding: 0; }
+        .cursus-editor h1, .cursus-editor h2, .cursus-editor h3 { margin: 0.8em 0 0.4em; font-weight: 600; }
+        .cursus-editor a { color: var(--accent); text-decoration: none; }
+        .cursus-editor a:hover { text-decoration: underline; }
+        .cursus-editor code {
           background: rgba(128,128,128,0.12);
           padding: 1px 4px; border-radius: 3px; font-size: 0.92em;
         }

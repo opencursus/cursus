@@ -1163,23 +1163,185 @@ function Kbd({ children }: { children: React.ReactNode }) {
   );
 }
 
+type UpdateState =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "current"; current: string }
+  | {
+      status: "available";
+      current: string;
+      latest: string;
+      url: string;
+      publishedAt: string;
+    }
+  | { status: "error"; message: string };
+
+const RELEASES_API =
+  "https://api.github.com/repos/opencursus/cursus/releases/latest";
+const REPO_URL = "https://github.com/opencursus/cursus";
+
+function isNewerSemver(latest: string, current: string): boolean {
+  const a = latest.split(".").map((n) => Number(n) || 0);
+  const b = current.split(".").map((n) => Number(n) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x > y) return true;
+    if (x < y) return false;
+  }
+  return false;
+}
+
 function AboutSection() {
+  const [update, setUpdate] = useState<UpdateState>({ status: "idle" });
+
+  async function checkForUpdates() {
+    setUpdate({ status: "checking" });
+    try {
+      const res = await fetch(RELEASES_API, {
+        headers: { Accept: "application/vnd.github+json" },
+      });
+      if (res.status === 404) {
+        // No published releases yet — treat as "you're current".
+        setUpdate({ status: "current", current: __APP_VERSION__ });
+        return;
+      }
+      if (!res.ok) {
+        setUpdate({
+          status: "error",
+          message: `GitHub returned ${res.status}`,
+        });
+        return;
+      }
+      const data = (await res.json()) as {
+        tag_name?: string;
+        html_url?: string;
+        published_at?: string;
+      };
+      const latest = String(data.tag_name ?? "").replace(/^v/, "");
+      const current = __APP_VERSION__;
+      if (latest && isNewerSemver(latest, current)) {
+        setUpdate({
+          status: "available",
+          current,
+          latest,
+          url: data.html_url ?? `${REPO_URL}/releases/latest`,
+          publishedAt: data.published_at ?? "",
+        });
+      } else {
+        setUpdate({ status: "current", current });
+      }
+    } catch (err) {
+      setUpdate({ status: "error", message: String(err) });
+    }
+  }
+
+  async function openExternal(url: string) {
+    try {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(url);
+    } catch {
+      window.open(url, "_blank");
+    }
+  }
+
   return (
     <>
       <SectionHeader title="About" description="What this is running." />
       <dl className="grid grid-cols-[140px_1fr] gap-y-2.5 text-[13px]">
         <dt className="text-muted">Version</dt>
-        <dd className="text-primary font-medium tabular-nums">{__APP_VERSION__}</dd>
-        <dt className="text-muted">Database</dt>
-        <dd className="text-primary font-mono text-[12px] break-all">
-          %APPDATA%\com.flow.mail\flow.db
+        <dd className="text-primary font-medium tabular-nums">
+          {__APP_VERSION__}
         </dd>
-        <dt className="text-muted">Settings table</dt>
+        <dt className="text-muted">Created by</dt>
         <dd className="text-primary">
-          Stored as key/value rows in SQLite — the same file as accounts and drafts.
+          Bernardo de Ascensão
         </dd>
+        <dt className="text-muted">Source</dt>
+        <dd>
+          <button
+            type="button"
+            onClick={() => openExternal(REPO_URL)}
+            className="text-accent hover:underline"
+          >
+            github.com/opencursus/cursus
+          </button>
+        </dd>
+        <dt className="text-muted">License</dt>
+        <dd className="text-primary">Apache-2.0</dd>
       </dl>
+
+      <div className="mt-6 rounded-lg border border-soft bg-sunken p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[13px] font-medium text-primary">Updates</div>
+            <UpdateStatus state={update} />
+          </div>
+          {update.status === "available" ? (
+            <Button
+              variant="primary"
+              onClick={() =>
+                update.status === "available" && openExternal(update.url)
+              }
+              className="min-w-[140px]"
+            >
+              Open release page
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={checkForUpdates}
+              disabled={update.status === "checking"}
+              className="min-w-[140px]"
+            >
+              {update.status === "checking" ? "Checking…" : "Check for updates"}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-4 text-[11.5px] text-muted">
+        Your data lives in <code className="font-mono">cursus-files/</code>{" "}
+        next to this executable. Move the folder, move your accounts, drafts
+        and search index along with it.
+      </p>
     </>
+  );
+}
+
+function UpdateStatus({ state }: { state: UpdateState }) {
+  if (state.status === "idle") {
+    return (
+      <p className="mt-1 text-[12px] text-muted">
+        Compare your version against the latest GitHub Release.
+      </p>
+    );
+  }
+  if (state.status === "checking") {
+    return <p className="mt-1 text-[12px] text-muted">Asking GitHub…</p>;
+  }
+  if (state.status === "current") {
+    return (
+      <p className="mt-1 text-[12px] text-muted">
+        You're on the latest version (v{state.current}).
+      </p>
+    );
+  }
+  if (state.status === "available") {
+    const date = state.publishedAt
+      ? new Date(state.publishedAt).toLocaleDateString()
+      : "";
+    return (
+      <p className="mt-1 text-[12px] text-primary">
+        v{state.latest} is available{date ? ` (released ${date})` : ""}. You're
+        on v{state.current}.
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-[12px] text-[color:var(--color-danger)]">
+      Couldn't reach GitHub: {state.message}
+    </p>
   );
 }
 
