@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   X,
   Plus,
@@ -13,6 +13,7 @@ import {
   Filter,
   Download,
   Upload,
+  MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
@@ -212,21 +213,11 @@ function AccountsSection() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            leading={<Upload size={14} />}
-            onClick={() => setShowImport(true)}
-          >
-            Import…
-          </Button>
-          <Button
-            variant="ghost"
-            leading={<Download size={14} />}
-            onClick={() => setShowExport(true)}
-            disabled={accounts.length === 0}
-          >
-            Export…
-          </Button>
+          <AccountsOverflow
+            exportDisabled={accounts.length === 0}
+            onImport={() => setShowImport(true)}
+            onExport={() => setShowExport(true)}
+          />
           <Button
             variant="primary"
             leading={<Plus size={14} />}
@@ -1292,5 +1283,110 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
         Add account
       </Button>
     </div>
+  );
+}
+
+function AccountsOverflow({
+  onImport,
+  onExport,
+  exportDisabled,
+}: {
+  onImport: () => void;
+  onExport: () => void;
+  exportDisabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account actions"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "h-9 w-9 inline-flex items-center justify-center rounded-md",
+          "bg-sunken text-secondary border border-soft",
+          "hover:border-strong hover:text-primary hover:bg-hover transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-soft)]",
+          open && "border-strong text-primary",
+        )}
+      >
+        <MoreHorizontal size={16} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full mt-1 z-20 min-w-[200px] rounded-md border border-strong bg-raised shadow-soft py-1"
+        >
+          <OverflowItem
+            icon={<Upload size={14} />}
+            onClick={() => {
+              setOpen(false);
+              onImport();
+            }}
+          >
+            Import accounts…
+          </OverflowItem>
+          <OverflowItem
+            icon={<Download size={14} />}
+            disabled={exportDisabled}
+            onClick={() => {
+              setOpen(false);
+              onExport();
+            }}
+          >
+            Export accounts…
+          </OverflowItem>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OverflowItem({
+  icon,
+  disabled,
+  onClick,
+  children,
+}: {
+  icon: React.ReactNode;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] text-left",
+        "text-secondary hover:bg-hover hover:text-primary transition-colors",
+        "disabled:opacity-50 disabled:pointer-events-none",
+      )}
+    >
+      <span className="text-muted">{icon}</span>
+      <span>{children}</span>
+    </button>
   );
 }
