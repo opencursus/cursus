@@ -233,6 +233,10 @@ export const ipc = {
     invoke<string>("backup_seal", { password, plaintext }),
   backupUnseal: (password: string, blob: string) =>
     invoke<string>("backup_unseal", { password, blob }),
+  backupWriteFile: (path: string, contents: string) =>
+    invoke<void>("backup_write_file", { path, contents }),
+  backupReadFile: (path: string) =>
+    invoke<string>("backup_read_file", { path }),
 };
 
 /** Payload of the `imap-update` event emitted from the Rust IDLE loop. */

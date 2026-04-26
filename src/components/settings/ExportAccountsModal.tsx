@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Download, X } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { ipc } from "@/lib/ipc";
@@ -57,7 +56,7 @@ export function ExportAccountsModal({ accounts, onClose }: Props) {
         setBusy(false);
         return;
       }
-      await writeTextFile(path, sealed);
+      await ipc.backupWriteFile(path, sealed);
       toast.success(`Exported ${selected.size} account${selected.size > 1 ? "s" : ""}`);
       onClose();
     } catch (err) {
@@ -144,6 +143,7 @@ export function ExportAccountsModal({ accounts, onClose }: Props) {
               leading={<Download size={14} />}
               onClick={handleExport}
               disabled={busy}
+              className="min-w-[120px]"
             >
               {busy ? "Encrypting…" : "Export"}
             </Button>

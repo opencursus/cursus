@@ -145,6 +145,8 @@ pub fn run() {
             commands::imap_idle_stop,
             commands::backup_seal,
             commands::backup_unseal,
+            commands::backup_write_file,
+            commands::backup_read_file,
             get_database_url,
         ])
         .run(tauri::generate_context!())

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Upload, X } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readTextFile } from "@tauri-apps/plugin-fs";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { ipc } from "@/lib/ipc";
@@ -66,7 +65,7 @@ export function ImportAccountsModal({ existing, onClose, onImported }: Props) {
     }
     setBusy(true);
     try {
-      const sealed = await readTextFile(filePath);
+      const sealed = await ipc.backupReadFile(filePath);
       const json = await ipc.backupUnseal(password, sealed);
       const bundle = JSON.parse(json) as AccountsBundle;
       if (bundle.version !== 1) {

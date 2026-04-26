@@ -44,6 +44,16 @@ pub fn backup_unseal(password: String, blob: String) -> std::result::Result<Stri
 }
 
 #[tauri::command]
+pub fn backup_write_file(path: String, contents: String) -> std::result::Result<(), String> {
+    std::fs::write(&path, contents.as_bytes()).map_err(|e| format!("write {}: {}", path, e))
+}
+
+#[tauri::command]
+pub fn backup_read_file(path: String) -> std::result::Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("read {}: {}", path, e))
+}
+
+#[tauri::command]
 pub async fn window_set_unread_badge(app: tauri::AppHandle, count: u32) -> Result<()> {
     use tauri::Manager;
     log::info!("window_set_unread_badge(count={count}) invoked");
