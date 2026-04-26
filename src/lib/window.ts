@@ -1,4 +1,5 @@
 import {
+  availableMonitors,
   getCurrentWindow,
   PhysicalPosition,
   PhysicalSize,
@@ -21,6 +22,36 @@ function parseInt32(v: string | null): number | null {
   return Math.trunc(n);
 }
 
+/**
+ * Returns true when the (x, y) physical pixel falls inside any currently
+ * connected monitor. Used to discard stale window positions saved on a
+ * previous monitor layout — without this check the window restores to a
+ * coordinate that is no longer on screen, which feels like the app didn't
+ * launch at all.
+ */
+async function isPositionOnScreen(x: number, y: number): Promise<boolean> {
+  try {
+    const monitors = await availableMonitors();
+    for (const m of monitors) {
+      const mx = m.position.x;
+      const my = m.position.y;
+      if (
+        x >= mx &&
+        x < mx + m.size.width &&
+        y >= my &&
+        y < my + m.size.height
+      ) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    // If we can't enumerate monitors for some reason, trust the saved
+    // position rather than centering — the user's setup is unknown.
+    return true;
+  }
+}
+
 export async function restoreWindowState(): Promise<void> {
   const win = getCurrentWindow();
   let stored: Record<string, string | null> = {};
@@ -40,7 +71,7 @@ export async function restoreWindowState(): Promise<void> {
     if (w != null && h != null && w >= MIN_W && h >= MIN_H) {
       await win.setSize(new PhysicalSize(w, h));
     }
-    if (x != null && y != null) {
+    if (x != null && y != null && (await isPositionOnScreen(x, y))) {
       await win.setPosition(new PhysicalPosition(x, y));
     } else {
       await win.center();
