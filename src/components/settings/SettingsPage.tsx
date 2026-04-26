@@ -1176,8 +1176,11 @@ type UpdateState =
     }
   | { status: "error"; message: string };
 
+// Use the listing endpoint (per_page=1) instead of /releases/latest because
+// /latest excludes pre-releases. While we're shipping v0.1.x as previews,
+// this is the only way the checker can detect a newer version.
 const RELEASES_API =
-  "https://api.github.com/repos/opencursus/cursus/releases/latest";
+  "https://api.github.com/repos/opencursus/cursus/releases?per_page=1";
 const REPO_URL = "https://github.com/opencursus/cursus";
 
 function isNewerSemver(latest: string, current: string): boolean {
@@ -1201,11 +1204,6 @@ function AboutSection() {
       const res = await fetch(RELEASES_API, {
         headers: { Accept: "application/vnd.github+json" },
       });
-      if (res.status === 404) {
-        // No published releases yet — treat as "you're current".
-        setUpdate({ status: "current", current: __APP_VERSION__ });
-        return;
-      }
       if (!res.ok) {
         setUpdate({
           status: "error",
@@ -1213,20 +1211,30 @@ function AboutSection() {
         });
         return;
       }
-      const data = (await res.json()) as {
+      const list = (await res.json()) as Array<{
         tag_name?: string;
         html_url?: string;
         published_at?: string;
-      };
-      const latest = String(data.tag_name ?? "").replace(/^v/, "");
+      }>;
+      if (!Array.isArray(list) || list.length === 0) {
+        // No releases at all yet.
+        setUpdate({ status: "current", current: __APP_VERSION__ });
+        return;
+      }
+      const release = list[0];
+      if (!release) {
+        setUpdate({ status: "current", current: __APP_VERSION__ });
+        return;
+      }
+      const latest = String(release.tag_name ?? "").replace(/^v/, "");
       const current = __APP_VERSION__;
       if (latest && isNewerSemver(latest, current)) {
         setUpdate({
           status: "available",
           current,
           latest,
-          url: data.html_url ?? `${REPO_URL}/releases/latest`,
-          publishedAt: data.published_at ?? "",
+          url: release.html_url ?? `${REPO_URL}/releases`,
+          publishedAt: release.published_at ?? "",
         });
       } else {
         setUpdate({ status: "current", current });
