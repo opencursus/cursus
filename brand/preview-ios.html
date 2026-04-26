@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cursus — iOS-style icon preview</title>
+<style>
+  :root { --accent: #5B8DEF; --accent-soft: #3d6fd6; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "SF Pro Text", "Inter", system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 48px 32px;
+    background:
+      radial-gradient(ellipse at 20% 20%, rgba(99,102,241,0.35), transparent 50%),
+      radial-gradient(ellipse at 80% 30%, rgba(59,130,246,0.28), transparent 55%),
+      radial-gradient(ellipse at 60% 80%, rgba(236,72,153,0.2), transparent 55%),
+      linear-gradient(180deg, #0b0c10 0%, #14161d 100%);
+    color: #f0f2f5;
+  }
+  h1 {
+    font-size: 22px; font-weight: 700;
+    letter-spacing: -0.02em; margin-bottom: 6px;
+  }
+  h1 span { color: #7fb0ff; }
+  p.sub {
+    font-size: 13px; color: rgba(255,255,255,0.55);
+    margin-bottom: 40px; max-width: 680px; line-height: 1.55;
+  }
+  .row { display: flex; gap: 40px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 56px; }
+  .tile { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .icon {
+    width: 180px; height: 180px;
+    border-radius: 40.5px; /* iOS 17+ uses ~22.5% of side */
+    background: linear-gradient(135deg, #5B8DEF 0%, #3B6FD1 100%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow:
+      0 1px 2px rgba(0,0,0,0.5),
+      0 8px 24px rgba(0,0,0,0.35),
+      inset 0 1px 1px rgba(255,255,255,0.18);
+    position: relative;
+    overflow: hidden;
+  }
+  .icon svg { color: white; }
+  .icon::after {
+    /* subtle glossy highlight like iOS */
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 40%);
+    pointer-events: none;
+  }
+  .label { font-size: 13.5px; font-weight: 500; color: #f0f2f5; }
+
+  .grid-sizes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-top: 24px;
+  }
+  .size-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 20px;
+  }
+  .size-card h3 {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.5); margin-bottom: 14px;
+  }
+  .size-row {
+    display: flex; align-items: flex-end; gap: 18px; margin-bottom: 14px;
+  }
+  .size-row svg { color: white; }
+  .size-row .px { font-size: 10px; color: rgba(255,255,255,0.4); display: block; margin-top: 4px; text-align: center; }
+  .lockup {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 20px; font-weight: 600; letter-spacing: -0.02em;
+  }
+  .lockup svg { color: white; }
+
+  .section-title {
+    font-size: 13px; font-weight: 700; margin: 48px 0 18px;
+    text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.5);
+  }
+
+  .notes {
+    font-size: 12px; color: rgba(255,255,255,0.5);
+    line-height: 1.6; margin-top: 12px; max-width: 680px;
+  }
+  .notes b { color: rgba(255,255,255,0.75); font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>Cursus <span>— topdown, 3 variants</span></h1>
+  <p class="sub">iOS SpringBoard preview (180×180 squircle with iOS-style gradient + gloss). Each variant adds detail to break away from the Lucide Navigation arrow look.</p>
+
+  <!-- Big iOS-style icons -->
+  <div class="row">
+    <div class="tile">
+      <div class="icon"><svg width="108" height="108" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 54 56 L 32 46 L 10 56 Z" stroke-width="3"/><path d="M 32 4 L 32 46" stroke-width="2.5"/><path d="M 32 4 L 22 34" stroke-width="1.8" opacity="0.7"/><path d="M 32 4 L 42 34" stroke-width="1.8" opacity="0.7"/></svg></div>
+      <div class="label">Crease · tall</div>
+    </div>
+    <div class="tile">
+      <div class="icon"><svg width="108" height="108" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 10 L 60 52 L 32 42 L 4 52 Z" stroke-width="3"/><path d="M 32 4 L 32 52" stroke-width="2.5"/><path d="M 18 47 L 28 30" stroke-width="1.8" opacity="0.7"/><path d="M 46 47 L 36 30" stroke-width="1.8" opacity="0.7"/></svg></div>
+      <div class="label">Wide · pluma</div>
+    </div>
+    <div class="tile">
+      <div class="icon"><svg width="108" height="108" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 56 54 L 32 44 L 14 50 Z" stroke-width="3"/><path d="M 14 50 L 24 36 L 32 44" stroke-width="2.5"/><path d="M 32 4 L 32 44" stroke-width="2" opacity="0.7"/></svg></div>
+      <div class="label">Fold · asymmetric</div>
+    </div>
+  </div>
+
+  <!-- Reality check at small sizes + wordmark -->
+  <div class="section-title">Reality check — favicons, sidebar, wordmark</div>
+  <div class="grid-sizes">
+    <!-- Crease -->
+    <div class="size-card">
+      <h3>Crease · tall</h3>
+      <div class="size-row">
+        <div><svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 54 56 L 32 46 L 10 56 Z" stroke-width="3"/><path d="M 32 4 L 32 46" stroke-width="2.5"/><path d="M 32 4 L 22 34" stroke-width="1.8" opacity="0.55"/><path d="M 32 4 L 42 34" stroke-width="1.8" opacity="0.55"/></svg><span class="px">16</span></div>
+        <div><svg width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 54 56 L 32 46 L 10 56 Z" stroke-width="3"/><path d="M 32 4 L 32 46" stroke-width="2.5"/><path d="M 32 4 L 22 34" stroke-width="1.8" opacity="0.55"/><path d="M 32 4 L 42 34" stroke-width="1.8" opacity="0.55"/></svg><span class="px">24</span></div>
+        <div><svg width="40" height="40" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 54 56 L 32 46 L 10 56 Z" stroke-width="3"/><path d="M 32 4 L 32 46" stroke-width="2.5"/><path d="M 32 4 L 22 34" stroke-width="1.8" opacity="0.55"/><path d="M 32 4 L 42 34" stroke-width="1.8" opacity="0.55"/></svg><span class="px">40</span></div>
+        <div><svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 54 56 L 32 46 L 10 56 Z" stroke-width="3"/><path d="M 32 4 L 32 46" stroke-width="2.5"/><path d="M 32 4 L 22 34" stroke-width="1.8" opacity="0.55"/><path d="M 32 4 L 42 34" stroke-width="1.8" opacity="0.55"/></svg><span class="px">64</span></div>
+      </div>
+      <div class="lockup"><svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 54 56 L 32 46 L 10 56 Z" stroke-width="3"/><path d="M 32 4 L 32 46" stroke-width="2.5"/><path d="M 32 4 L 22 34" stroke-width="1.8" opacity="0.55"/><path d="M 32 4 L 42 34" stroke-width="1.8" opacity="0.55"/></svg><span>Cursus</span></div>
+    </div>
+
+    <!-- Wide -->
+    <div class="size-card">
+      <h3>Wide · pluma</h3>
+      <div class="size-row">
+        <div><svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 10 L 60 52 L 32 42 L 4 52 Z" stroke-width="3"/><path d="M 32 4 L 32 52" stroke-width="2.5"/><path d="M 18 47 L 28 30" stroke-width="1.8" opacity="0.55"/><path d="M 46 47 L 36 30" stroke-width="1.8" opacity="0.55"/></svg><span class="px">16</span></div>
+        <div><svg width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 10 L 60 52 L 32 42 L 4 52 Z" stroke-width="3"/><path d="M 32 4 L 32 52" stroke-width="2.5"/><path d="M 18 47 L 28 30" stroke-width="1.8" opacity="0.55"/><path d="M 46 47 L 36 30" stroke-width="1.8" opacity="0.55"/></svg><span class="px">24</span></div>
+        <div><svg width="40" height="40" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 10 L 60 52 L 32 42 L 4 52 Z" stroke-width="3"/><path d="M 32 4 L 32 52" stroke-width="2.5"/><path d="M 18 47 L 28 30" stroke-width="1.8" opacity="0.55"/><path d="M 46 47 L 36 30" stroke-width="1.8" opacity="0.55"/></svg><span class="px">40</span></div>
+        <div><svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 10 L 60 52 L 32 42 L 4 52 Z" stroke-width="3"/><path d="M 32 4 L 32 52" stroke-width="2.5"/><path d="M 18 47 L 28 30" stroke-width="1.8" opacity="0.55"/><path d="M 46 47 L 36 30" stroke-width="1.8" opacity="0.55"/></svg><span class="px">64</span></div>
+      </div>
+      <div class="lockup"><svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 10 L 60 52 L 32 42 L 4 52 Z" stroke-width="3"/><path d="M 32 4 L 32 52" stroke-width="2.5"/><path d="M 18 47 L 28 30" stroke-width="1.8" opacity="0.55"/><path d="M 46 47 L 36 30" stroke-width="1.8" opacity="0.55"/></svg><span>Cursus</span></div>
+    </div>
+
+    <!-- Fold -->
+    <div class="size-card">
+      <h3>Fold · asymmetric</h3>
+      <div class="size-row">
+        <div><svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 56 54 L 32 44 L 14 50 Z" stroke-width="3"/><path d="M 14 50 L 24 36 L 32 44" stroke-width="2.5"/><path d="M 32 4 L 32 44" stroke-width="2" opacity="0.55"/></svg><span class="px">16</span></div>
+        <div><svg width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 56 54 L 32 44 L 14 50 Z" stroke-width="3"/><path d="M 14 50 L 24 36 L 32 44" stroke-width="2.5"/><path d="M 32 4 L 32 44" stroke-width="2" opacity="0.55"/></svg><span class="px">24</span></div>
+        <div><svg width="40" height="40" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 56 54 L 32 44 L 14 50 Z" stroke-width="3"/><path d="M 14 50 L 24 36 L 32 44" stroke-width="2.5"/><path d="M 32 4 L 32 44" stroke-width="2" opacity="0.55"/></svg><span class="px">40</span></div>
+        <div><svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 56 54 L 32 44 L 14 50 Z" stroke-width="3"/><path d="M 14 50 L 24 36 L 32 44" stroke-width="2.5"/><path d="M 32 4 L 32 44" stroke-width="2" opacity="0.55"/></svg><span class="px">64</span></div>
+      </div>
+      <div class="lockup"><svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 32 4 L 56 54 L 32 44 L 14 50 Z" stroke-width="3"/><path d="M 14 50 L 24 36 L 32 44" stroke-width="2.5"/><path d="M 32 4 L 32 44" stroke-width="2" opacity="0.55"/></svg><span>Cursus</span></div>
+    </div>
+  </div>
+
+  <p class="notes">
+    <b>Crease · tall</b>: proporções 1.3:1 (mais alto). Duas linhas diagonais a partir da ponta simulam o vinco das asas. Lê-se imediatamente como "avião de papel", não como seta.<br>
+    <b>Wide · pluma</b>: base larga, spine forte atravessa o ícone (topo até base). Silhueta mais leve, próxima de uma pluma ou emblema heráldico.<br>
+    <b>Fold · asymmetric</b>: quebra a simetria — asa esquerda tem uma aba "dobrada por baixo" visível. O gesto assimétrico é o que mais se diferencia de qualquer ícone de navegação standard.
+  </p>
+</body>
+</html>

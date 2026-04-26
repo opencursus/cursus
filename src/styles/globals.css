@@ -1,0 +1,220 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant black (&:where(.black, .black *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+
+  /* Spark-inspired accent (indigo/blue) */
+  --color-accent-50:  #eef4ff;
+  --color-accent-100: #dbe7ff;
+  --color-accent-200: #b8cfff;
+  --color-accent-300: #8fb3ff;
+  --color-accent-400: #6a97fb;
+  --color-accent-500: #5b8def;
+  --color-accent-600: #4670d1;
+  --color-accent-700: #3557a8;
+  --color-accent-800: #223a74;
+  --color-accent-900: #162447;
+
+  /* Neutral scale — cool grays */
+  --color-surface-0:   #ffffff;
+  --color-surface-50:  #fafafa;
+  --color-surface-100: #f3f4f6;
+  --color-surface-200: #e8ebef;
+  --color-surface-300: #d1d5db;
+  --color-surface-400: #9ca3af;
+  --color-surface-500: #6b7280;
+  --color-surface-600: #4b5563;
+  --color-surface-700: #374151;
+  --color-surface-800: #1f2430;
+  --color-surface-900: #151821;
+  --color-surface-950: #0f1115;
+  --color-surface-true-black: #000000;
+
+  /* Semantic */
+  --color-success: #2fbf71;
+  --color-warning: #f5a524;
+  --color-danger:  #e5484d;
+}
+
+:root {
+  color-scheme: light;
+
+  --bg-base:     var(--color-surface-50);
+  --bg-raised:   var(--color-surface-0);
+  --bg-sunken:   var(--color-surface-100);
+  --bg-hover:    var(--color-surface-100);
+  --bg-selected: var(--color-accent-100);
+  --bg-sidebar:  #f6f7fa;
+
+  --fg-primary:   var(--color-surface-900);
+  --fg-secondary: var(--color-surface-600);
+  --fg-muted:     var(--color-surface-500);
+  --fg-disabled:  var(--color-surface-400);
+
+  --border-soft:   rgba(15, 17, 21, 0.06);
+  --border-strong: rgba(15, 17, 21, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(15, 17, 21, 0.04),
+               0 1px 1px rgba(15, 17, 21, 0.02);
+  --shadow-md: 0 4px 16px rgba(15, 17, 21, 0.06),
+               0 1px 3px rgba(15, 17, 21, 0.04);
+
+  --accent: var(--color-accent-500);
+  --accent-hover: var(--color-accent-600);
+  --accent-soft: var(--color-accent-100);
+}
+
+html.dark {
+  color-scheme: dark;
+
+  --bg-base:     var(--color-surface-900);
+  --bg-raised:   var(--color-surface-800);
+  --bg-sunken:   var(--color-surface-950);
+  --bg-hover:    rgba(255, 255, 255, 0.04);
+  --bg-selected: rgba(91, 141, 239, 0.16);
+  --bg-sidebar:  #12151c;
+
+  --fg-primary:   #f0f2f5;
+  --fg-secondary: #a8b0be;
+  --fg-muted:     #7e8695;
+  --fg-disabled:  #55596a;
+
+  --border-soft:   rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.1);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.45);
+
+  --accent: var(--color-accent-400);
+  --accent-hover: var(--color-accent-300);
+  --accent-soft: rgba(106, 151, 251, 0.18);
+}
+
+html.black {
+  color-scheme: dark;
+
+  /* True-black base for OLED, but raised/sunken surfaces step up visibly so
+     cards, popovers, and segmented controls stay readable. Mirrors the
+     approach used in Apple Mail (macOS), Things, and iOS 17 in OLED dark. */
+  --bg-base:     var(--color-surface-true-black);
+  --bg-raised:   #15171c;
+  --bg-sunken:   #0a0b0e;
+  --bg-hover:    rgba(255, 255, 255, 0.06);
+  --bg-selected: rgba(91, 141, 239, 0.2);
+  --bg-sidebar:  #07080a;
+
+  --fg-primary:   #f2f3f5;
+  --fg-secondary: #a8b0bc;
+  --fg-muted:     #7b8290;
+  --fg-disabled:  #4a4f5c;
+
+  --border-soft:   rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.6);
+
+  --accent: var(--color-accent-400);
+  --accent-hover: var(--color-accent-300);
+  --accent-soft: rgba(106, 151, 251, 0.22);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg-base);
+  color: var(--fg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Thin custom scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-surface-400);
+  background-clip: padding-box;
+}
+
+/* Semantic utility classes */
+@layer utilities {
+  .bg-base     { background-color: var(--bg-base); }
+  .bg-raised   { background-color: var(--bg-raised); }
+  .bg-sunken   { background-color: var(--bg-sunken); }
+  .bg-hover    { background-color: var(--bg-hover); }
+  .bg-selected { background-color: var(--bg-selected); }
+  .bg-sidebar  { background-color: var(--bg-sidebar); }
+
+  .text-primary   { color: var(--fg-primary); }
+  .text-secondary { color: var(--fg-secondary); }
+  .text-muted     { color: var(--fg-muted); }
+  .text-disabled  { color: var(--fg-disabled); }
+
+  .border-soft   { border-color: var(--border-soft); }
+  .border-strong { border-color: var(--border-strong); }
+
+  .shadow-soft { box-shadow: var(--shadow-sm); }
+  .shadow-lift { box-shadow: var(--shadow-md); }
+
+  .text-accent { color: var(--accent); }
+  .bg-accent   { background-color: var(--accent); }
+  .bg-accent-soft { background-color: var(--accent-soft); }
+
+  .drag-region { -webkit-app-region: drag; app-region: drag; }
+  .no-drag     { -webkit-app-region: no-drag; app-region: no-drag; }
+
+  .hover-danger { transition: background-color 120ms, color 120ms; }
+  .hover-danger:hover { background-color: var(--color-danger); color: #fff; }
+}
+
+/* Fade-in animation for view transitions */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fade-in 120ms ease-out both; }

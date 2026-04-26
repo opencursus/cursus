@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open Cursus — logo concepts</title>
+<style>
+  :root { --accent: #5B8DEF; --accent-400: #6a97fb; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Inter", -apple-system, system-ui, sans-serif;
+    background: #fafafa; color: #151821; padding: 32px;
+  }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  h1 span { color: var(--accent); }
+  p.sub { font-size: 12.5px; color: #6b7280; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+  .card {
+    border: 1px solid rgba(0,0,0,0.08); border-radius: 12px;
+    padding: 24px; background: white; text-align: center;
+  }
+  .card.dark { background: #151821; color: #f0f2f5; border-color: rgba(255,255,255,0.08); }
+  .card.black { background: #000; color: #f2f3f5; border-color: rgba(255,255,255,0.08); }
+  .card.accent { background: var(--accent); color: white; border: none; }
+  .card h3 {
+    font-size: 10.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 18px; opacity: 0.55;
+  }
+  .row { display: flex; align-items: center; justify-content: center; }
+  .row svg { color: var(--accent); }
+  .dark .row svg, .black .row svg { color: var(--accent-400); }
+  .accent .row svg { color: white; }
+  .sizes {
+    display: flex; align-items: flex-end; justify-content: center;
+    gap: 18px; margin-bottom: 16px;
+  }
+  .sizes svg { color: #151821; }
+  .lockup {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 24px; font-weight: 600; letter-spacing: -0.02em;
+    margin-bottom: 32px;
+  }
+  .lockup svg { color: var(--accent); }
+  .section-title {
+    font-size: 13px; font-weight: 600; margin: 36px 0 14px;
+    text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280;
+  }
+  .section-title b { color: #151821; font-weight: 600; text-transform: none; letter-spacing: -0.01em; margin-right: 6px; }
+</style>
+</head>
+<body>
+  <h1>Open <span>Cursus</span> — 4 concept logos</h1>
+  <p class="sub">Single-color SVGs using <code>currentColor</code>. 64×64 viewBox · Shown on light / dark / black / accent, and at 16/24/40/64 px.</p>
+
+  <!-- 1 SIGIL -->
+  <div class="section-title"><b>1 · Sigil</b> — circular seal with C + outward arrow</div>
+  <div class="grid">
+    <div class="card"><h3>Light</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="26" stroke-width="3.5"/><path d="M 44 22 A 12 12 0 1 0 44 42" stroke-width="5"/><path d="M 44 42 L 52 46 M 44 42 L 48 34" stroke-width="4.5"/></svg></div></div>
+    <div class="card dark"><h3>Dark</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="26" stroke-width="3.5"/><path d="M 44 22 A 12 12 0 1 0 44 42" stroke-width="5"/><path d="M 44 42 L 52 46 M 44 42 L 48 34" stroke-width="4.5"/></svg></div></div>
+    <div class="card black"><h3>Black</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="26" stroke-width="3.5"/><path d="M 44 22 A 12 12 0 1 0 44 42" stroke-width="5"/><path d="M 44 42 L 52 46 M 44 42 L 48 34" stroke-width="4.5"/></svg></div></div>
+    <div class="card accent"><h3>On accent</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="26" stroke-width="3.5"/><path d="M 44 22 A 12 12 0 1 0 44 42" stroke-width="5"/><path d="M 44 42 L 52 46 M 44 42 L 48 34" stroke-width="4.5"/></svg></div></div>
+  </div>
+  <div class="sizes">
+    <svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="26" stroke-width="3.5"/><path d="M 44 22 A 12 12 0 1 0 44 42" stroke-width="5"/><path d="M 44 42 L 52 46 M 44 42 L 48 34" stroke-width="4.5"/></svg>
+    <svg width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="26" stroke-width="3.5"/><path d="M 44 22 A 12 12 0 1 0 44 42" stroke-width="5"/><path d="M 44 42 L 52 46 M 44 42 L 48 34" stroke-width="4.5"/></svg>
+    <svg width="40" height="40" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="26" stroke-width="3.5"/><path d="M 44 22 A 12 12 0 1 0 44 42" stroke-width="5"/><path d="M 44 42 L 52 46 M 44 42 L 48 34" stroke-width="4.5"/></svg>
+    <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="26" stroke-width="3.5"/><path d="M 44 22 A 12 12 0 1 0 44 42" stroke-width="5"/><path d="M 44 42 L 52 46 M 44 42 L 48 34" stroke-width="4.5"/></svg>
+  </div>
+  <div class="lockup"><svg width="36" height="36" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="26" stroke-width="3.5"/><path d="M 44 22 A 12 12 0 1 0 44 42" stroke-width="5"/><path d="M 44 42 L 52 46 M 44 42 L 48 34" stroke-width="4.5"/></svg><span>Cursus</span></div>
+
+  <!-- 2 VECTOR -->
+  <div class="section-title"><b>2 · Vector</b> — ascending arc + arrow</div>
+  <div class="grid">
+    <div class="card"><h3>Light</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="50" r="5" fill="currentColor" stroke="none"/><path d="M 14 44 Q 14 14 50 14" stroke-width="5"/><path d="M 40 8 L 52 14 L 46 26" stroke-width="5"/></svg></div></div>
+    <div class="card dark"><h3>Dark</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="50" r="5" fill="currentColor" stroke="none"/><path d="M 14 44 Q 14 14 50 14" stroke-width="5"/><path d="M 40 8 L 52 14 L 46 26" stroke-width="5"/></svg></div></div>
+    <div class="card black"><h3>Black</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="50" r="5" fill="currentColor" stroke="none"/><path d="M 14 44 Q 14 14 50 14" stroke-width="5"/><path d="M 40 8 L 52 14 L 46 26" stroke-width="5"/></svg></div></div>
+    <div class="card accent"><h3>On accent</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="50" r="5" fill="currentColor" stroke="none"/><path d="M 14 44 Q 14 14 50 14" stroke-width="5"/><path d="M 40 8 L 52 14 L 46 26" stroke-width="5"/></svg></div></div>
+  </div>
+  <div class="sizes">
+    <svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="50" r="5" fill="currentColor" stroke="none"/><path d="M 14 44 Q 14 14 50 14" stroke-width="5"/><path d="M 40 8 L 52 14 L 46 26" stroke-width="5"/></svg>
+    <svg width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="50" r="5" fill="currentColor" stroke="none"/><path d="M 14 44 Q 14 14 50 14" stroke-width="5"/><path d="M 40 8 L 52 14 L 46 26" stroke-width="5"/></svg>
+    <svg width="40" height="40" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="50" r="5" fill="currentColor" stroke="none"/><path d="M 14 44 Q 14 14 50 14" stroke-width="5"/><path d="M 40 8 L 52 14 L 46 26" stroke-width="5"/></svg>
+    <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="50" r="5" fill="currentColor" stroke="none"/><path d="M 14 44 Q 14 14 50 14" stroke-width="5"/><path d="M 40 8 L 52 14 L 46 26" stroke-width="5"/></svg>
+  </div>
+  <div class="lockup"><svg width="36" height="36" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="50" r="5" fill="currentColor" stroke="none"/><path d="M 14 44 Q 14 14 50 14" stroke-width="5"/><path d="M 40 8 L 52 14 L 46 26" stroke-width="5"/></svg><span>Cursus</span></div>
+
+  <!-- 3 PLANE -->
+  <div class="section-title"><b>3 · Plane</b> — folded paper plane</div>
+  <div class="grid">
+    <div class="card"><h3>Light</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 8 32 L 56 10 L 42 42 L 30 34 Z" stroke-width="3.5"/><path d="M 30 34 L 28 52 L 38 42" stroke-width="3.5"/><path d="M 30 34 L 56 10" stroke-width="2" opacity="0.45"/></svg></div></div>
+    <div class="card dark"><h3>Dark</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 8 32 L 56 10 L 42 42 L 30 34 Z" stroke-width="3.5"/><path d="M 30 34 L 28 52 L 38 42" stroke-width="3.5"/><path d="M 30 34 L 56 10" stroke-width="2" opacity="0.45"/></svg></div></div>
+    <div class="card black"><h3>Black</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 8 32 L 56 10 L 42 42 L 30 34 Z" stroke-width="3.5"/><path d="M 30 34 L 28 52 L 38 42" stroke-width="3.5"/><path d="M 30 34 L 56 10" stroke-width="2" opacity="0.45"/></svg></div></div>
+    <div class="card accent"><h3>On accent</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 8 32 L 56 10 L 42 42 L 30 34 Z" stroke-width="3.5"/><path d="M 30 34 L 28 52 L 38 42" stroke-width="3.5"/><path d="M 30 34 L 56 10" stroke-width="2" opacity="0.45"/></svg></div></div>
+  </div>
+  <div class="sizes">
+    <svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 8 32 L 56 10 L 42 42 L 30 34 Z" stroke-width="3.5"/><path d="M 30 34 L 28 52 L 38 42" stroke-width="3.5"/><path d="M 30 34 L 56 10" stroke-width="2" opacity="0.45"/></svg>
+    <svg width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 8 32 L 56 10 L 42 42 L 30 34 Z" stroke-width="3.5"/><path d="M 30 34 L 28 52 L 38 42" stroke-width="3.5"/><path d="M 30 34 L 56 10" stroke-width="2" opacity="0.45"/></svg>
+    <svg width="40" height="40" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 8 32 L 56 10 L 42 42 L 30 34 Z" stroke-width="3.5"/><path d="M 30 34 L 28 52 L 38 42" stroke-width="3.5"/><path d="M 30 34 L 56 10" stroke-width="2" opacity="0.45"/></svg>
+    <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 8 32 L 56 10 L 42 42 L 30 34 Z" stroke-width="3.5"/><path d="M 30 34 L 28 52 L 38 42" stroke-width="3.5"/><path d="M 30 34 L 56 10" stroke-width="2" opacity="0.45"/></svg>
+  </div>
+  <div class="lockup"><svg width="36" height="36" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M 8 32 L 56 10 L 42 42 L 30 34 Z" stroke-width="3.5"/><path d="M 30 34 L 28 52 L 38 42" stroke-width="3.5"/><path d="M 30 34 L 56 10" stroke-width="2" opacity="0.45"/></svg><span>Cursus</span></div>
+
+  <!-- 4 MONOGRAM -->
+  <div class="section-title"><b>4 · Monogram</b> — O + C interlocked</div>
+  <div class="grid">
+    <div class="card"><h3>Light</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="32" r="18" stroke-width="4"/><path d="M 52 22 A 14 14 0 1 0 52 42" stroke-width="4"/></svg></div></div>
+    <div class="card dark"><h3>Dark</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="32" r="18" stroke-width="4"/><path d="M 52 22 A 14 14 0 1 0 52 42" stroke-width="4"/></svg></div></div>
+    <div class="card black"><h3>Black</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="32" r="18" stroke-width="4"/><path d="M 52 22 A 14 14 0 1 0 52 42" stroke-width="4"/></svg></div></div>
+    <div class="card accent"><h3>On accent</h3><div class="row"><svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="32" r="18" stroke-width="4"/><path d="M 52 22 A 14 14 0 1 0 52 42" stroke-width="4"/></svg></div></div>
+  </div>
+  <div class="sizes">
+    <svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="32" r="18" stroke-width="4"/><path d="M 52 22 A 14 14 0 1 0 52 42" stroke-width="4"/></svg>
+    <svg width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="32" r="18" stroke-width="4"/><path d="M 52 22 A 14 14 0 1 0 52 42" stroke-width="4"/></svg>
+    <svg width="40" height="40" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="32" r="18" stroke-width="4"/><path d="M 52 22 A 14 14 0 1 0 52 42" stroke-width="4"/></svg>
+    <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="32" r="18" stroke-width="4"/><path d="M 52 22 A 14 14 0 1 0 52 42" stroke-width="4"/></svg>
+  </div>
+  <div class="lockup"><svg width="36" height="36" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="32" r="18" stroke-width="4"/><path d="M 52 22 A 14 14 0 1 0 52 42" stroke-width="4"/></svg><span>Cursus</span></div>
+</body>
+</html>

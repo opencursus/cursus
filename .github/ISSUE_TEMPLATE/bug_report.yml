@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a defect in Cursus.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. Please redact passwords,
+        full email contents, and any sensitive third-party PII before submitting.
+
+  - type: input
+    id: version
+    attributes:
+      label: Cursus version
+      description: Settings → About, or the commit hash if built from source.
+      placeholder: "v0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux (specify distro in Steps)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps so a stranger can follow.
+      placeholder: |
+        1. Add a Gmail account with STARTTLS
+        2. Open Drafts folder
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include error messages verbatim if any.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        From the Cursus log output if available. Strip passwords and
+        third-party message contents.
+      render: shell
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Pre-submission
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: I have removed credentials and third-party PII from any logs included.
+          required: true
