@@ -22,6 +22,7 @@ import { useAccountsStore } from "@/stores/accounts";
 import { useUiStore } from "@/stores/ui";
 import { toast } from "@/stores/toasts";
 import { notifyNewMail } from "@/lib/notifications";
+import { flog } from "@/lib/logger";
 
 export interface FetchFolderOptions {
   /**
@@ -768,6 +769,9 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     // Read-only browsing mode: skip the +Seen unless the caller forced it.
     const force = opts?.force === true;
     if (!force && useUiStore.getState().dontMarkReadOnOpen) return;
+    flog.info(
+      `markRead: id=${id} folderId=${thread.folderId} force=${force}`,
+    );
     // Optimistic local update (thread flag + sidebar badge count).
     set((state) => ({
       threads: state.threads.map((t) => (t.id === id ? { ...t, hasUnread: false } : t)),
@@ -780,7 +784,7 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
       const { config, folderPath } = await sessionFor(thread);
       await ipc.imapSetFlags(config, folderPath, thread.id, ["\\Seen"], "add");
     } catch (err) {
-      console.error("markRead failed on server:", err);
+      flog.error(`markRead failed on server (id=${id}):`, err);
       // Revert the local count so the sidebar stays truthful.
       useAccountsStore.getState().adjustFolderUnread(thread.folderId, +1);
       set((state) => ({
