@@ -39,7 +39,6 @@ export function MessageList() {
   const markManyRead = useThreadsStore((s) => s.markManyRead);
   const selectedThreadId = useUiStore((s) => s.selectedThreadId);
   const selectThread = useUiStore((s) => s.selectThread);
-  const markRead = useThreadsStore((s) => s.markRead);
   const activeCategory = useUiStore((s) => s.activeCategory);
   const starredView = useUiStore((s) => s.starredView);
   const selectedIds = useUiStore((s) => s.selectedIds);
@@ -176,7 +175,8 @@ export function MessageList() {
     }
     clearSelection();
     selectThread(thread.id);
-    markRead(thread.id);
+    // markRead now runs in App.tsx via a useEffect on selectedThreadId so
+    // keyboard navigation (j/k, Enter, arrows) marks the thread too.
   }
 
   function refresh() {

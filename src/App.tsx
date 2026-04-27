@@ -25,6 +25,16 @@ export default function App() {
   const syncIntervalMs = useUiStore((s) => s.syncIntervalMs);
   const activeAccountId = useAccountsStore((s) => s.activeAccountId);
   const activeFolderId = useAccountsStore((s) => s.activeFolderId);
+  const selectedThreadId = useUiStore((s) => s.selectedThreadId);
+
+  // Auto mark-as-read on selection — covers click, j/k, Enter, and any other
+  // path that flips selectedThreadId. markRead is a no-op if the thread is
+  // already read or if the user has dontMarkReadOnOpen on, so calling here
+  // unconditionally is safe.
+  useEffect(() => {
+    if (selectedThreadId == null) return;
+    void useThreadsStore.getState().markRead(selectedThreadId).catch(() => {});
+  }, [selectedThreadId]);
 
   // ── IMAP IDLE wiring ────────────────────────────────────────────────────
   // 1) When the active (account, folder) changes, stop any prior IDLE and
