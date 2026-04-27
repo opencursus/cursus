@@ -6,10 +6,12 @@ import {
   listAccounts,
   listFoldersForAccount,
   pruneFolders,
+  setAccountSortOrders,
   upsertFolder,
   type StoredAccount,
   type StoredFolder,
 } from "@/lib/db";
+import { flog } from "@/lib/logger";
 import { ipc } from "@/lib/ipc";
 
 const DEFAULT_WORKSPACE: Workspace = {
@@ -158,6 +160,7 @@ interface AccountsState {
   loading: boolean;
 
   loadAccounts: () => Promise<void>;
+  reorderAccounts: (fromIndex: number, toIndex: number) => Promise<void>;
   loadFoldersFor: (accountId: number) => Promise<void>;
   createFolder: (accountId: number, name: string) => Promise<void>;
   renameFolder: (accountId: number, from: string, to: string) => Promise<void>;
@@ -264,6 +267,31 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     } catch (err) {
       console.error("loadAccounts failed", err);
       set({ loading: false });
+    }
+  },
+
+  reorderAccounts: async (fromIndex, toIndex) => {
+    const current = get().accounts;
+    if (
+      fromIndex === toIndex ||
+      fromIndex < 0 || fromIndex >= current.length ||
+      toIndex < 0 || toIndex >= current.length
+    ) return;
+
+    const next = current.slice();
+    const [moved] = next.splice(fromIndex, 1);
+    if (!moved) return;
+    next.splice(toIndex, 0, moved);
+
+    // Optimistic — sidebar re-renders immediately, persist in the background.
+    set({ accounts: next });
+
+    try {
+      await setAccountSortOrders(next.map((a) => a.id));
+      flog.info(`reorderAccounts ok: ${next.map((a) => a.id).join(",")}`);
+    } catch (err) {
+      flog.error("reorderAccounts persist failed:", err);
+      set({ accounts: current });
     }
   },
 

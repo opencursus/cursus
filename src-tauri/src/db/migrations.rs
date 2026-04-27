@@ -44,5 +44,11 @@ pub fn all() -> Vec<Migration> {
             sql: include_str!("../../migrations/07_rules.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "account sort order for sidebar drag-reorder",
+            sql: include_str!("../../migrations/08_account_sort_order.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
