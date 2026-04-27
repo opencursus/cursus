@@ -106,8 +106,31 @@ export async function listAccounts(): Promise<StoredAccount[]> {
             imap_username, smtp_mode, smtp_host, smtp_port, smtp_security,
             smtp_username, resend_from_address, signature_html, created_at
        FROM accounts
-       ORDER BY id ASC`,
+       ORDER BY sort_order ASC, id ASC`,
   );
+}
+
+/** Persist a new sidebar order. Caller passes the full account list in the
+ *  desired order; this writes `sort_order = index` for each row in a single
+ *  transaction so the sidebar's optimistic update doesn't drift from the DB. */
+export async function setAccountSortOrders(
+  orderedIds: number[],
+): Promise<void> {
+  if (orderedIds.length === 0) return;
+  const db = await getDb();
+  await db.execute("BEGIN");
+  try {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.execute(
+        `UPDATE accounts SET sort_order = $1, updated_at = unixepoch() WHERE id = $2`,
+        [i, orderedIds[i]],
+      );
+    }
+    await db.execute("COMMIT");
+  } catch (err) {
+    await db.execute("ROLLBACK").catch(() => {});
+    throw err;
+  }
 }
 
 export async function getAccount(id: number): Promise<StoredAccount | null> {

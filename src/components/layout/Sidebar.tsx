@@ -59,12 +59,17 @@ export function Sidebar() {
 
   const renameFolder = useAccountsStore((s) => s.renameFolder);
   const deleteFolder = useAccountsStore((s) => s.deleteFolder);
+  const reorderAccounts = useAccountsStore((s) => s.reorderAccounts);
 
   const [menu, setMenu] = useState<FolderContextMenuState | null>(null);
   const [renamingFolderId, setRenamingFolderId] = useState<number | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [deletingFolder, setDeletingFolder] = useState<MailFolder | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Drag-reorder state for the Accounts list. `dragIndex` is the row being
+  // dragged; `dragOverIndex` is where a drop would land (for the line cue).
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const activeAccount = accounts.find((a) => a.id === activeAccountId) ?? accounts[0];
   const accountFolders = activeAccount
@@ -220,13 +225,36 @@ export function Sidebar() {
             {!sidebarCollapsed && (
               <SectionHeader className="mt-4">Accounts</SectionHeader>
             )}
-            {accounts.map((account) => (
+            {accounts.map((account, index) => (
               <AccountRow
                 key={account.id}
                 account={account}
                 active={account.id === activeAccountId}
                 collapsed={sidebarCollapsed}
                 unread={unreadByAccountId.get(account.id) ?? 0}
+                index={index}
+                isDragging={dragIndex === index}
+                dropAbove={dragOverIndex === index && dragIndex !== null && dragIndex > index}
+                dropBelow={dragOverIndex === index && dragIndex !== null && dragIndex < index}
+                onDragStart={() => setDragIndex(index)}
+                onDragOver={() => {
+                  if (dragIndex === null || dragIndex === index) return;
+                  setDragOverIndex(index);
+                }}
+                onDragLeave={() => {
+                  setDragOverIndex((cur) => (cur === index ? null : cur));
+                }}
+                onDrop={() => {
+                  if (dragIndex !== null && dragIndex !== index) {
+                    void reorderAccounts(dragIndex, index);
+                  }
+                  setDragIndex(null);
+                  setDragOverIndex(null);
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null);
+                  setDragOverIndex(null);
+                }}
               />
             ))}
             {!sidebarCollapsed && (
@@ -449,57 +477,112 @@ function AccountRow({
   active,
   collapsed,
   unread,
+  index,
+  isDragging,
+  dropAbove,
+  dropBelow,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: {
   account: Account;
   active: boolean;
   collapsed: boolean;
   unread: number;
+  index: number;
+  isDragging: boolean;
+  dropAbove: boolean;
+  dropBelow: boolean;
+  onDragStart: () => void;
+  onDragOver: () => void;
+  onDragLeave: () => void;
+  onDrop: () => void;
+  onDragEnd: () => void;
 }) {
   const { setActiveAccount } = useAccountsStore();
   return (
-    <button
-      type="button"
-      onClick={() => setActiveAccount(account.id)}
-      style={
-        active
-          ? {
-              backgroundColor: "var(--accent-soft)",
-              border: "1.5px solid var(--accent)",
-              color: "var(--fg-primary)",
-            }
-          : { border: "1.5px solid transparent" }
-      }
-      className={cn(
-        "flex h-11 items-center gap-2.5 w-full rounded-md px-2.5 transition-colors",
-        !active && "text-secondary hover:bg-hover hover:text-primary",
-        collapsed && "justify-center",
-      )}
-      title={collapsed ? account.email : undefined}
+    <div
+      className="relative"
+      draggable
+      onDragStart={(e) => {
+        // Some browsers cancel the drag if dataTransfer has nothing.
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(index));
+        onDragStart();
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        onDragOver();
+      }}
+      onDragLeave={onDragLeave}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop();
+      }}
+      onDragEnd={onDragEnd}
+      style={{ opacity: isDragging ? 0.4 : 1 }}
     >
-      <span
-        className="relative block h-2.5 w-2.5 rounded-full shrink-0"
-        style={{ backgroundColor: account.color }}
-        aria-hidden
-      >
-        {collapsed && unread > 0 && <UnreadBadge count={unread} floating />}
-      </span>
-      {!collapsed && (
-        <>
-          <span className="flex-1 min-w-0 text-left">
-            <div
-              className={cn(
-                "text-[12.5px] truncate",
-                active ? "font-semibold text-primary" : "font-medium",
-              )}
-            >
-              {account.displayName}
-            </div>
-            <div className="text-[11px] text-muted truncate">{account.email}</div>
-          </span>
-          {unread > 0 && <UnreadBadge count={unread} />}
-        </>
+      {dropAbove && (
+        <div
+          aria-hidden
+          className="absolute left-1 right-1 top-0 h-0.5 rounded-full"
+          style={{ background: "var(--accent)" }}
+        />
       )}
-    </button>
+      {dropBelow && (
+        <div
+          aria-hidden
+          className="absolute left-1 right-1 bottom-0 h-0.5 rounded-full"
+          style={{ background: "var(--accent)" }}
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => setActiveAccount(account.id)}
+        style={
+          active
+            ? {
+                backgroundColor: "var(--accent-soft)",
+                border: "1.5px solid var(--accent)",
+                color: "var(--fg-primary)",
+              }
+            : { border: "1.5px solid transparent" }
+        }
+        className={cn(
+          "flex h-11 items-center gap-2.5 w-full rounded-md px-2.5 transition-colors cursor-grab active:cursor-grabbing",
+          !active && "text-secondary hover:bg-hover hover:text-primary",
+          collapsed && "justify-center",
+        )}
+        title={collapsed ? account.email : undefined}
+      >
+        <span
+          className="relative block h-2.5 w-2.5 rounded-full shrink-0"
+          style={{ backgroundColor: account.color }}
+          aria-hidden
+        >
+          {collapsed && unread > 0 && <UnreadBadge count={unread} floating />}
+        </span>
+        {!collapsed && (
+          <>
+            <span className="flex-1 min-w-0 text-left">
+              <div
+                className={cn(
+                  "text-[12.5px] truncate",
+                  active ? "font-semibold text-primary" : "font-medium",
+                )}
+              >
+                {account.displayName}
+              </div>
+              <div className="text-[11px] text-muted truncate">{account.email}</div>
+            </span>
+            {unread > 0 && <UnreadBadge count={unread} />}
+          </>
+        )}
+      </button>
+    </div>
   );
 }
 
