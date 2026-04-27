@@ -160,7 +160,20 @@ pub async fn imap_set_flags(
     flags: Vec<String>,
     mode: FlagMode,
 ) -> Result<()> {
-    imap::client::set_flags(&config, &folder, uid, &flags, mode).await
+    log::info!(
+        "imap_set_flags → host={} folder={:?} uid={} mode={:?} flags={:?}",
+        config.host, folder, uid, mode, flags,
+    );
+    match imap::client::set_flags(&config, &folder, uid, &flags, mode).await {
+        Ok(()) => {
+            log::info!("imap_set_flags ok uid={}", uid);
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("imap_set_flags failed uid={}: {e}", uid);
+            Err(e)
+        }
+    }
 }
 
 #[tauri::command]
@@ -170,7 +183,20 @@ pub async fn imap_move_uid(
     dest_folder: String,
     uid: u32,
 ) -> Result<()> {
-    imap::client::move_uid(&config, &folder, &dest_folder, uid).await
+    log::info!(
+        "imap_move_uid → host={} from={:?} to={:?} uid={}",
+        config.host, folder, dest_folder, uid,
+    );
+    match imap::client::move_uid(&config, &folder, &dest_folder, uid).await {
+        Ok(()) => {
+            log::info!("imap_move_uid ok uid={}", uid);
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("imap_move_uid failed uid={}: {e}", uid);
+            Err(e)
+        }
+    }
 }
 
 #[tauri::command]
@@ -184,7 +210,20 @@ pub async fn smtp_send(
     message: OutgoingMessage,
     save_to_sent: Option<SaveToSent>,
 ) -> Result<SendResult> {
-    lettre_transport::send(&config, &message, save_to_sent.as_ref()).await
+    log::info!(
+        "smtp_send → host={} port={} from={} to={:?} subj={:?}",
+        config.host, config.port, message.from, message.to, message.subject,
+    );
+    match lettre_transport::send(&config, &message, save_to_sent.as_ref()).await {
+        Ok(r) => {
+            log::info!("smtp_send ok: id={:?} appended={:?}", r.message_id, r.imap_appended);
+            Ok(r)
+        }
+        Err(e) => {
+            log::error!("smtp_send failed: {e}");
+            Err(e)
+        }
+    }
 }
 
 #[tauri::command]
@@ -193,7 +232,20 @@ pub async fn resend_send(
     message: OutgoingMessage,
     save_to_sent: Option<SaveToSent>,
 ) -> Result<SendResult> {
-    resend::send(&api_key, &message, save_to_sent.as_ref()).await
+    log::info!(
+        "resend_send → from={} to={:?} subj={:?} attachments={}",
+        message.from, message.to, message.subject, message.attachments.len(),
+    );
+    match resend::send(&api_key, &message, save_to_sent.as_ref()).await {
+        Ok(r) => {
+            log::info!("resend_send ok: id={:?} appended={:?}", r.message_id, r.imap_appended);
+            Ok(r)
+        }
+        Err(e) => {
+            log::error!("resend_send failed: {e}");
+            Err(e)
+        }
+    }
 }
 
 #[tauri::command]
@@ -204,7 +256,17 @@ pub async fn resend_send_template(
     to: Vec<String>,
     variables: serde_json::Value,
 ) -> Result<SendResult> {
-    resend::send_template(&api_key, &template_id, &from, &to, &variables).await
+    log::info!("resend_send_template → template={} from={} to={:?}", template_id, from, to);
+    match resend::send_template(&api_key, &template_id, &from, &to, &variables).await {
+        Ok(r) => {
+            log::info!("resend_send_template ok: id={:?}", r.message_id);
+            Ok(r)
+        }
+        Err(e) => {
+            log::error!("resend_send_template failed: {e}");
+            Err(e)
+        }
+    }
 }
 
 #[tauri::command]
@@ -261,4 +323,24 @@ pub async fn imap_idle_stop(
     let key = format!("{account_id}:{folder}");
     manager.stop(&key).await;
     Ok(())
+}
+
+/// Forward a log line from the frontend into the unified Rust logger so it
+/// lands in the same rotated file as backend logs. Unknown levels collapse
+/// to info — never reject a log call, the cost of losing context is higher.
+#[tauri::command]
+pub fn log_frontend(level: String, message: String) {
+    match level.as_str() {
+        "error" => log::error!(target: "frontend", "{message}"),
+        "warn" => log::warn!(target: "frontend", "{message}"),
+        "debug" => log::debug!(target: "frontend", "{message}"),
+        _ => log::info!(target: "frontend", "{message}"),
+    }
+}
+
+/// Absolute path of `<exe_dir>/cursus-files/logs/`. Used by the "Open log
+/// folder" button in Settings → About.
+#[tauri::command]
+pub fn get_logs_dir(state: tauri::State<'_, crate::LogsDir>) -> String {
+    state.0.to_string_lossy().into_owned()
 }

@@ -29,6 +29,11 @@ use crate::imap::idle::IdleManager;
 /// registered migrations against.
 pub struct DbUrl(pub String);
 
+/// Absolute portable logs directory, `<exe_dir>/cursus-files/logs/`. The
+/// frontend reads it via `get_logs_dir` so the "Open log folder" button
+/// always opens the same path the Rust target writes to.
+pub struct LogsDir(pub PathBuf);
+
 fn resolve_data_dir() -> PathBuf {
     let exe = std::env::current_exe().expect("current_exe");
     let exe_dir = exe.parent().expect("exe parent").to_path_buf();
@@ -64,13 +69,17 @@ fn get_database_url(state: tauri::State<'_, DbUrl>) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let db_path = resolve_data_dir().join("cursus.db");
+    let data_dir = resolve_data_dir();
+    let db_path = data_dir.join("cursus.db");
     // SQLx's sqlite URL parser accepts forward slashes on Windows; normalise
     // backslashes so the connection string is valid on every platform.
     let db_url = format!(
         "sqlite:{}",
         db_path.to_string_lossy().replace('\\', "/")
     );
+
+    let logs_dir = data_dir.join("logs");
+    let _ = std::fs::create_dir_all(&logs_dir);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
@@ -86,6 +95,15 @@ pub fn run() {
                 .level_for("async_native_tls", log::LevelFilter::Warn)
                 .level_for("rustls", log::LevelFilter::Warn)
                 .level_for("sqlx", log::LevelFilter::Warn)
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Folder {
+                        path: logs_dir.clone(),
+                        file_name: Some("Cursus".into()),
+                    }),
+                ])
+                .max_file_size(2_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5))
                 .build(),
         )
         .plugin(
@@ -106,6 +124,7 @@ pub fn run() {
         ))
         .manage(Arc::new(IdleManager::new()))
         .manage(DbUrl(db_url.clone()))
+        .manage(LogsDir(logs_dir.clone()))
         .setup(|app| {
             let show_item = MenuItem::with_id(app, "show", "Show Cursus", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -167,6 +186,8 @@ pub fn run() {
             commands::backup_unseal,
             commands::backup_write_file,
             commands::backup_read_file,
+            commands::log_frontend,
+            commands::get_logs_dir,
             get_database_url,
         ])
         .run(tauri::generate_context!())

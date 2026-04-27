@@ -237,6 +237,10 @@ export const ipc = {
     invoke<void>("backup_write_file", { path, contents }),
   backupReadFile: (path: string) =>
     invoke<string>("backup_read_file", { path }),
+
+  getLogsDir: () => invoke<string>("get_logs_dir"),
+  logFrontend: (level: "info" | "warn" | "error" | "debug", message: string) =>
+    invoke<void>("log_frontend", { level, message }),
 };
 
 /** Payload of the `imap-update` event emitted from the Rust IDLE loop. */

@@ -45,6 +45,7 @@ import {
   type ResendTemplateSummary,
 } from "@/lib/ipc";
 import { toast } from "@/stores/toasts";
+import { flog } from "@/lib/logger";
 
 interface PendingAttachment {
   id: string;
@@ -447,6 +448,10 @@ export function Composer() {
     snapshotDraftId: number | null,
   ): Promise<void> {
     setSending(true);
+    flog.info(
+      `compose: performSend start account=${snap.accountId} mode=${snap.mode} ` +
+      `to=${snap.to} cc=${snap.cc} bcc=${snap.bcc} subj=${JSON.stringify(snap.subject)}`,
+    );
     try {
       const account = await getAccount(snap.accountId);
       if (!account) throw new Error("active account not found");
@@ -569,8 +574,10 @@ export function Composer() {
       if (snapshotDraftId != null) {
         await deleteDraft(snapshotDraftId).catch(() => {});
       }
+      flog.info(`compose: performSend ok messageId=${sendResult.messageId ?? "?"}`);
       toast.success("Message sent");
     } catch (err) {
+      flog.error("compose: performSend failed:", err);
       toast.error(`Send failed: ${err}`);
     } finally {
       setSending(false);
