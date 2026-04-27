@@ -22,6 +22,7 @@ import { useUiStore, type RemoteImagesPolicy } from "@/stores/ui";
 import { useAccountsStore } from "@/stores/accounts";
 import { useBodiesStore } from "@/stores/bodies";
 import { toast } from "@/stores/toasts";
+import { ipc } from "@/lib/ipc";
 import {
   deleteAccount,
   deleteRule,
@@ -1313,6 +1314,26 @@ function AboutSection() {
         next to this executable. Move the folder, move your accounts, drafts
         and search index along with it.
       </p>
+
+      <div className="mt-4 flex items-center gap-2">
+        <Button
+          variant="secondary"
+          onClick={async () => {
+            try {
+              const dir = await ipc.getLogsDir();
+              const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+              await revealItemInDir(dir);
+            } catch (err) {
+              toast.error(`Could not open log folder: ${err}`);
+            }
+          }}
+        >
+          Open log folder
+        </Button>
+        <span className="text-[11.5px] text-muted">
+          Includes send failures, IMAP errors and frontend exceptions.
+        </span>
+      </div>
     </>
   );
 }

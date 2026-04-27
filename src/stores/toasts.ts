@@ -30,15 +30,21 @@ interface ToastsStore {
 
 let nextId = 1;
 const DEFAULT_TTL_MS = 3200;
+// Errors are noisy on purpose — the message is usually the only context the
+// user gets ("Send failed: 422 unverified domain"). Default to 15 s so it
+// doesn't disappear before they can read it; an explicit durationMs still
+// wins for callers that want shorter or sticky.
+const ERROR_TTL_MS = 15000;
 
 export const useToastsStore = create<ToastsStore>((set, get) => ({
   toasts: [],
-  push: ({ kind, message, action, durationMs = DEFAULT_TTL_MS }) => {
+  push: ({ kind, message, action, durationMs }) => {
+    const ttl = durationMs ?? (kind === "error" ? ERROR_TTL_MS : DEFAULT_TTL_MS);
     const id = nextId++;
-    const toast: Toast = { id, kind, message, action, durationMs };
+    const toast: Toast = { id, kind, message, action, durationMs: ttl };
     set((s) => ({ toasts: [...s.toasts, toast] }));
-    if (durationMs > 0) {
-      setTimeout(() => get().dismiss(id), durationMs);
+    if (ttl > 0) {
+      setTimeout(() => get().dismiss(id), ttl);
     }
     return id;
   },
