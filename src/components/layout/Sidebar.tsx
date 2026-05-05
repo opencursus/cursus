@@ -78,10 +78,13 @@ export function Sidebar() {
   const hasAccounts = accounts.length > 0;
 
   // Sum of unread across every Inbox folder per account — matches what the
-  // taskbar badge uses as "this account has N new messages".
+  // taskbar badge uses as "this account has N new messages". Spam/Junk are
+  // excluded both by specialUse and by a name-pattern fallback so quirky
+  // IMAP servers without RFC 6154 attributes still get the right answer.
   const unreadByAccountId = new Map<number, number>();
   for (const f of folders) {
     if (f.specialUse !== "inbox") continue;
+    if (/\b(spam|junk)\b/i.test(f.name) || /\b(spam|junk)\b/i.test(f.path)) continue;
     unreadByAccountId.set(
       f.accountId,
       (unreadByAccountId.get(f.accountId) ?? 0) + (f.unreadCount ?? 0),
