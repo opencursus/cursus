@@ -8,6 +8,8 @@ mod imap;
 mod parser;
 mod secrets;
 mod smtp;
+#[cfg(windows)]
+mod win_notify_setup;
 
 pub use error::{Error, Result};
 
@@ -80,6 +82,12 @@ pub fn run() {
 
     let logs_dir = data_dir.join("logs");
     let _ = std::fs::create_dir_all(&logs_dir);
+
+    // Portable WinRT toasts only fire if the AUMID is registered via a Start
+    // Menu shortcut. The installer-based bundle gets this for free; the
+    // portable .exe doesn't, so we set it up ourselves on every launch.
+    #[cfg(windows)]
+    win_notify_setup::ensure_aumid_shortcut("com.opencursus.app", "Cursus");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
