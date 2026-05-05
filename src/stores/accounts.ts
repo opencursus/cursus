@@ -84,7 +84,15 @@ function matchNameToSpecial(name: string): SpecialUse | undefined {
   if (/^(sent|sent\s*(mail|items|messages))$/i.test(name)) return "sent";
   if (/^(drafts?)$/i.test(name)) return "drafts";
   if (/^(trash|deleted(\s*items)?|bin|lixo)$/i.test(name)) return "trash";
-  if (/^(junk|spam|bulk\s*mail|lixo\s*electr[oó]nico)$/i.test(name)) return "spam";
+  // Handles Outlook ("Junk E-mail" / "Junk Email"), Gmail ("[Gmail]/Spam" leaf),
+  // generic "Spam Mail", and PT "Lixo Electrónico". Server-flag detection still
+  // wins via FLAG_TO_SPECIAL when the IMAP server advertises \Junk.
+  if (
+    /^(junk(\s*(e-?mail|mail))?|spam(\s*mail)?|bulk\s*mail|lixo\s*electr[oó]nico)$/i.test(
+      name,
+    )
+  )
+    return "spam";
   if (/^(archive|archived|all\s*mail)$/i.test(name)) return "archive";
   return undefined;
 }

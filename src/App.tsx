@@ -150,6 +150,69 @@ export default function App() {
     };
   }, [syncIntervalMs]);
 
+  // ── Periodic badge resync ───────────────────────────────────────────────
+  // Optimistic adjustFolderUnread keeps the taskbar badge close to reality,
+  // but a dropped IDLE event or a server-side flag change made elsewhere
+  // (webmail, other client) leaves it drifting. Every 30s — and on every
+  // visibility / online flip — we re-pull IMAP STATUS UNSEEN for each inbox
+  // folder and apply the authoritative count. Cheap one-line round-trip
+  // per inbox and self-corrects within a tick when the user reads on another
+  // device.
+  useEffect(() => {
+    let cancelled = false;
+    async function tick() {
+      if (cancelled) return;
+      const accountsState = useAccountsStore.getState();
+      const inboxes = accountsState.folders.filter(
+        (f) => f.specialUse === "inbox" && f.id > 0,
+      );
+      if (inboxes.length === 0) return;
+      // Avoid disturbing the active view while the user is composing or
+      // configuring; the next visibility-change tick will catch up.
+      if (useComposerStore.getState().open) return;
+      if (useUiStore.getState().settingsOpen) return;
+      await Promise.all(
+        inboxes.map(async (folder) => {
+          try {
+            const account = await getAccount(folder.accountId);
+            if (!account) return;
+            const secrets = await getAccountSecrets(folder.accountId);
+            const config = {
+              host: account.imap_host,
+              port: account.imap_port,
+              username: account.imap_username ?? account.email,
+              password: secrets.imapPassword,
+              security: account.imap_security,
+            } as const;
+            const status = await ipc.imapFolderStatus(config, folder.path);
+            if (cancelled) return;
+            useAccountsStore.setState((state) => ({
+              folders: state.folders.map((f) =>
+                f.id === folder.id ? { ...f, unreadCount: status.unseen } : f,
+              ),
+            }));
+          } catch {
+            // Network blip, expired session, server hiccup — ignore. The
+            // next tick / IDLE round will resync.
+          }
+        }),
+      );
+    }
+    function visTick() {
+      if (document.visibilityState === "visible") void tick();
+    }
+    const id = window.setInterval(visTick, 30_000);
+    document.addEventListener("visibilitychange", visTick);
+    window.addEventListener("online", visTick);
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", visTick);
+      window.removeEventListener("online", visTick);
+    };
+  }, []);
+
   // ── Snooze checker ──────────────────────────────────────────────────────
   // Every minute: walk persisted messages in every folder, find ones whose
   // Cursus-SnoozedUntil deadline has passed, and remove the keyword on the

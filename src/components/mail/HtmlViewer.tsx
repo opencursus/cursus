@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { ImageOff } from "lucide-react";
 import { useUiStore } from "@/stores/ui";
+import { flog } from "@/lib/logger";
 
 interface Props {
   html: string;
@@ -98,6 +100,7 @@ export function HtmlViewer({ html, uid }: Props) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base target="_blank" />
     <style>
       html, body { margin: 0; padding: 0; }
       body {
@@ -125,6 +128,43 @@ export function HtmlViewer({ html, uid }: Props) {
   <body>${clean}</body>
 </html>`);
     doc.close();
+
+    // The iframe's sandbox blocks scripts, so the only navigation path is a
+    // browser-level click on <a>. The webview's CSP refuses to load arbitrary
+    // remote URLs and shows a "content blocked" page if we let that happen.
+    // Intercept clicks from the parent (same-origin sandbox lets us reach
+    // contentDocument) and hand the URL to the OS opener instead.
+    const onClick = (event: Event) => {
+      let node = event.target as Node | null;
+      while (node && node.nodeType === 1 && (node as Element).tagName !== "A") {
+        node = (node as Element).parentElement;
+      }
+      if (!node || node.nodeType !== 1) return;
+      const anchor = node as HTMLAnchorElement;
+      const href = anchor.getAttribute("href") ?? "";
+      if (!href) return;
+      const lower = href.toLowerCase();
+      if (
+        lower.startsWith("http://") ||
+        lower.startsWith("https://") ||
+        lower.startsWith("mailto:") ||
+        lower.startsWith("tel:")
+      ) {
+        event.preventDefault();
+        openUrl(href).catch((err) => {
+          flog.error(`openUrl failed for ${href}:`, err);
+        });
+        return;
+      }
+      // Anything else (javascript:, data:, file:, in-page #anchor) gets blocked
+      // outright — we don't trust it and the iframe sandbox would have
+      // navigated the inner frame to the broken-CSP screen anyway.
+      event.preventDefault();
+    };
+    doc.addEventListener("click", onClick, true);
+    return () => {
+      doc.removeEventListener("click", onClick, true);
+    };
   }, [clean]);
 
   const showBanner = remoteImages === "ask" && blocked > 0 && !allowed;

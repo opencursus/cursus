@@ -40,7 +40,11 @@ export function TitleBar() {
         <WindowButton
           danger
           onClick={() => {
-            win.close().catch((e) => console.error("close failed:", e));
+            // The title-bar X always hides to tray. Quitting goes through the
+            // dedicated Quit button next to Settings (or the tray menu Quit
+            // entry); calling win.close() here would route through the tray
+            // setting and risk killing the process unintentionally.
+            win.hide().catch((e) => console.error("hide failed:", e));
           }}
         >
           <X size={14} />

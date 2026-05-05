@@ -18,11 +18,21 @@ export function attachTaskbarBadge(): void {
       .catch((e) => console.warn("[badge] failed", total, e));
   };
 
+  // Belt-and-suspenders: positively filter for inbox AND defensively reject
+  // anything that looks spam-like by name, in case detectSpecialUse missed
+  // it on a non-RFC6154 server. Prevents the user's "spam shouldn't count"
+  // expectation from breaking on quirky IMAP setups.
+  const SPAMMY_NAME = /\b(spam|junk)\b/i;
   const computeUnread = (
     folders: ReturnType<typeof useAccountsStore.getState>["folders"],
   ) =>
     folders
-      .filter((f) => f.specialUse === "inbox")
+      .filter(
+        (f) =>
+          f.specialUse === "inbox" &&
+          !SPAMMY_NAME.test(f.name) &&
+          !SPAMMY_NAME.test(f.path),
+      )
       .reduce((sum, f) => sum + (f.unreadCount || 0), 0);
 
   const recompute = () => {

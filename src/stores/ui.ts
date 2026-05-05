@@ -143,7 +143,7 @@ export const useUiStore = create<UiState>((set) => ({
   remoteImages: "ask",
   allowedImageUids: [],
   launchAtLogin: false,
-  closeToTray: false,
+  closeToTray: true,
   undoSendSeconds: 5,
   confirmBeforeSend: true,
   dontMarkReadOnOpen: false,
