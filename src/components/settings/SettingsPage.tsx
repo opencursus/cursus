@@ -414,14 +414,45 @@ function GeneralSection() {
         label="Desktop notifications"
         hint="Toast alerts in the Windows Action Center when new mail arrives and this window is not focused."
       >
-        <SegmentedGroup<string>
-          value={notificationsEnabled ? "on" : "off"}
-          onChange={(v) => setNotificationsEnabled(v === "on")}
-          options={[
-            { value: "on", label: "On" },
-            { value: "off", label: "Off" },
-          ]}
-        />
+        <div className="flex items-center gap-2">
+          <SegmentedGroup<string>
+            value={notificationsEnabled ? "on" : "off"}
+            onChange={(v) => setNotificationsEnabled(v === "on")}
+            options={[
+              { value: "on", label: "On" },
+              { value: "off", label: "Off" },
+            ]}
+          />
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const {
+                  isPermissionGranted,
+                  requestPermission,
+                  sendNotification,
+                } = await import("@tauri-apps/plugin-notification");
+                if (!(await isPermissionGranted())) {
+                  const res = await requestPermission();
+                  if (res !== "granted") {
+                    toast.error("Notifications permission denied");
+                    return;
+                  }
+                }
+                sendNotification({
+                  title: "Cursus",
+                  body: "Test notification — toasts are working.",
+                });
+              } catch (err) {
+                toast.error(`Test failed: ${err}`);
+              }
+            }}
+            className="rounded-md border px-2.5 py-1 text-[12.5px] text-primary hover:bg-[rgba(255,255,255,0.06)]"
+            style={{ borderColor: "var(--border-strong)" }}
+          >
+            Send test
+          </button>
+        </div>
       </Row>
 
       <Row
