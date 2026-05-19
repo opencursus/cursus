@@ -137,7 +137,7 @@ export const useUiStore = create<UiState>((set) => ({
   starredView: false,
   selectedIds: [],
   selectionAnchorId: null,
-  syncIntervalMs: 60_000,
+  syncIntervalMs: 30_000,
   notificationsEnabled: true,
   taskbarBadgeEnabled: true,
   remoteImages: "ask",
