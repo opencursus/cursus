@@ -53,7 +53,7 @@
   --bg-base:     var(--color-surface-50);
   --bg-raised:   var(--color-surface-0);
   --bg-sunken:   var(--color-surface-100);
-  --bg-hover:    var(--color-surface-100);
+  --bg-hover:    var(--color-surface-300);
   --bg-selected: var(--color-accent-100);
   --bg-sidebar:  #f6f7fa;
 
@@ -81,7 +81,7 @@ html.dark {
   --bg-base:     var(--color-surface-900);
   --bg-raised:   var(--color-surface-800);
   --bg-sunken:   var(--color-surface-950);
-  --bg-hover:    rgba(255, 255, 255, 0.04);
+  --bg-hover:    rgba(255, 255, 255, 0.14);
   --bg-selected: rgba(91, 141, 239, 0.16);
   --bg-sidebar:  #12151c;
 
@@ -110,7 +110,7 @@ html.black {
   --bg-base:     var(--color-surface-true-black);
   --bg-raised:   #15171c;
   --bg-sunken:   #0a0b0e;
-  --bg-hover:    rgba(255, 255, 255, 0.06);
+  --bg-hover:    rgba(255, 255, 255, 0.16);
   --bg-selected: rgba(91, 141, 239, 0.2);
   --bg-sidebar:  #07080a;
 
@@ -153,13 +153,15 @@ body {
   box-sizing: border-box;
 }
 
-button {
-  font: inherit;
-  color: inherit;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
+@layer base {
+  button {
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
 }
 
 /* Thin custom scrollbars */
@@ -181,36 +183,34 @@ button {
   background-clip: padding-box;
 }
 
-/* Semantic utility classes */
-@layer utilities {
-  .bg-base     { background-color: var(--bg-base); }
-  .bg-raised   { background-color: var(--bg-raised); }
-  .bg-sunken   { background-color: var(--bg-sunken); }
-  .bg-hover    { background-color: var(--bg-hover); }
-  .bg-selected { background-color: var(--bg-selected); }
-  .bg-sidebar  { background-color: var(--bg-sidebar); }
+/* Semantic utility classes — Tailwind v4 `@utility` so variants (hover:, dark:, etc.) work */
+@utility bg-base     { background-color: var(--bg-base); }
+@utility bg-raised   { background-color: var(--bg-raised); }
+@utility bg-sunken   { background-color: var(--bg-sunken); }
+@utility bg-hover    { background-color: var(--bg-hover); }
+@utility bg-selected { background-color: var(--bg-selected); }
+@utility bg-sidebar  { background-color: var(--bg-sidebar); }
 
-  .text-primary   { color: var(--fg-primary); }
-  .text-secondary { color: var(--fg-secondary); }
-  .text-muted     { color: var(--fg-muted); }
-  .text-disabled  { color: var(--fg-disabled); }
+@utility text-primary   { color: var(--fg-primary); }
+@utility text-secondary { color: var(--fg-secondary); }
+@utility text-muted     { color: var(--fg-muted); }
+@utility text-disabled  { color: var(--fg-disabled); }
 
-  .border-soft   { border-color: var(--border-soft); }
-  .border-strong { border-color: var(--border-strong); }
+@utility border-soft   { border-color: var(--border-soft); }
+@utility border-strong { border-color: var(--border-strong); }
 
-  .shadow-soft { box-shadow: var(--shadow-sm); }
-  .shadow-lift { box-shadow: var(--shadow-md); }
+@utility shadow-soft { box-shadow: var(--shadow-sm); }
+@utility shadow-lift { box-shadow: var(--shadow-md); }
 
-  .text-accent { color: var(--accent); }
-  .bg-accent   { background-color: var(--accent); }
-  .bg-accent-soft { background-color: var(--accent-soft); }
+@utility text-accent { color: var(--accent); }
+@utility bg-accent   { background-color: var(--accent); }
+@utility bg-accent-soft { background-color: var(--accent-soft); }
 
-  .drag-region { -webkit-app-region: drag; app-region: drag; }
-  .no-drag     { -webkit-app-region: no-drag; app-region: no-drag; }
+@utility drag-region { -webkit-app-region: drag; app-region: drag; }
+@utility no-drag     { -webkit-app-region: no-drag; app-region: no-drag; }
 
-  .hover-danger { transition: background-color 120ms, color 120ms; }
-  .hover-danger:hover { background-color: var(--color-danger); color: #fff; }
-}
+.hover-danger { transition: background-color 120ms, color 120ms; }
+.hover-danger:hover { background-color: var(--color-danger); color: #fff; }
 
 /* Fade-in animation for view transitions */
 @keyframes fade-in {

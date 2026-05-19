@@ -105,7 +105,7 @@ function MenuButton({
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       title={hint}
-      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
+      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
       style={danger && !disabled ? { color: "var(--color-danger)" } : undefined}
     >
       <span className="text-muted">{icon}</span>

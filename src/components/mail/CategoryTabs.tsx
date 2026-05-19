@@ -54,13 +54,13 @@ export function CategoryTabs({ counts }: { counts: Record<string, number> }) {
                       boxShadow:
                         "0 1px 3px rgba(15,17,21,0.15), 0 1px 1px rgba(15,17,21,0.08)",
                     }
-                  : { background: "transparent", color: "rgba(255,255,255,0.85)" }),
+                  : {}),
               }}
               className={cn(
                 "flex items-center justify-center gap-1.5 h-9 px-3.5",
                 "text-[12.5px] font-medium whitespace-nowrap flex-1 min-w-0",
                 "transition-colors duration-150",
-                !isActive && "hover:bg-white/15 hover:text-white",
+                !isActive && "text-white/85 hover:bg-white/15 hover:text-white",
               )}
             >
               <Icon size={13} />
