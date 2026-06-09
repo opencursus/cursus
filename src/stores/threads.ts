@@ -235,6 +235,7 @@ function threadFromGroup(
 
   return {
     id: newest.uid,
+    memberUids: members.map((m) => m.uid),
     accountId,
     folderId,
     subject: newest.subject,
@@ -777,12 +778,16 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
       threads: state.threads.map((t) => (t.id === id ? { ...t, hasUnread: false } : t)),
     }));
     useAccountsStore.getState().adjustFolderUnread(thread.folderId, -1);
+    // Mark every message in the conversation, not just the newest — else the
+    // older unread members resurrect hasUnread on the next sync.
+    const uids = thread.memberUids.length > 0 ? thread.memberUids : [thread.id];
     if (thread.folderId > 0) {
-      void updateMessageFlags(thread.folderId, thread.id, { isUnread: false }).catch(() => {});
+      for (const uid of uids)
+        void updateMessageFlags(thread.folderId, uid, { isUnread: false }).catch(() => {});
     }
     try {
       const { config, folderPath } = await sessionFor(thread);
-      await ipc.imapSetFlags(config, folderPath, thread.id, ["\\Seen"], "add");
+      await ipc.imapSetFlagsBulk(config, folderPath, uids, ["\\Seen"], "add");
     } catch (err) {
       flog.error(`markRead failed on server (id=${id}):`, err);
       // Revert the local count so the sidebar stays truthful.
@@ -793,7 +798,8 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
         ),
       }));
       if (thread.folderId > 0) {
-        void updateMessageFlags(thread.folderId, thread.id, { isUnread: true }).catch(() => {});
+        for (const uid of uids)
+          void updateMessageFlags(thread.folderId, uid, { isUnread: true }).catch(() => {});
       }
     }
   },
@@ -1172,9 +1178,12 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     await runBulk(targets, async (thread) => {
       try {
         const { config, folderPath } = await sessionFor(thread);
-        await ipc.imapSetFlags(config, folderPath, thread.id, ["\\Seen"], "add");
+        // Whole conversation, not just the newest message (see markRead).
+        const uids = thread.memberUids.length > 0 ? thread.memberUids : [thread.id];
+        await ipc.imapSetFlagsBulk(config, folderPath, uids, ["\\Seen"], "add");
         if (thread.folderId > 0) {
-          void updateMessageFlags(thread.folderId, thread.id, { isUnread: false }).catch(() => {});
+          for (const uid of uids)
+            void updateMessageFlags(thread.folderId, uid, { isUnread: false }).catch(() => {});
         }
       } catch (err) {
         failed.push(thread);

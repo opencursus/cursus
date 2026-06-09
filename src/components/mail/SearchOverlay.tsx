@@ -98,6 +98,7 @@ export function SearchOverlay() {
       // message falls outside the latest-50 window being rendered in the list.
       const synthetic: Thread = {
         id: hit.imapUid,
+        memberUids: [hit.imapUid],
         accountId: hit.accountId,
         folderId: folder.id,
         subject: hit.subject ?? "(no subject)",

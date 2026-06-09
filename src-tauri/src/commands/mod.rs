@@ -177,6 +177,30 @@ pub async fn imap_set_flags(
 }
 
 #[tauri::command]
+pub async fn imap_set_flags_bulk(
+    config: ImapConfig,
+    folder: String,
+    uids: Vec<u32>,
+    flags: Vec<String>,
+    mode: FlagMode,
+) -> Result<()> {
+    log::info!(
+        "imap_set_flags_bulk → host={} folder={:?} uids={:?} mode={:?} flags={:?}",
+        config.host, folder, uids, mode, flags,
+    );
+    match imap::client::set_flags_bulk(&config, &folder, &uids, &flags, mode).await {
+        Ok(()) => {
+            log::info!("imap_set_flags_bulk ok uids={:?}", uids);
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("imap_set_flags_bulk failed uids={:?}: {e}", uids);
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
 pub async fn imap_move_uid(
     config: ImapConfig,
     folder: String,

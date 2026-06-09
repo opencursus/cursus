@@ -162,6 +162,22 @@ pub async fn set_flags(
     flags: &[String],
     mode: FlagMode,
 ) -> Result<()> {
+    set_flags_bulk(config, folder, &[uid], flags, mode).await
+}
+
+/// Apply a flag change to a set of UIDs in one `UID STORE`. Used for marking
+/// a whole conversation read in a single round-trip rather than one
+/// connection per message.
+pub async fn set_flags_bulk(
+    config: &ImapConfig,
+    folder: &str,
+    uids: &[u32],
+    flags: &[String],
+    mode: FlagMode,
+) -> Result<()> {
+    if uids.is_empty() {
+        return Ok(());
+    }
     let mut session = connect(config).await?;
     session
         .select(folder)
@@ -175,9 +191,14 @@ pub async fn set_flags(
         FlagMode::Replace => "FLAGS",
     };
     let query = format!("{prefix} ({flag_list})");
+    let uid_set = uids
+        .iter()
+        .map(|u| u.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
 
     let mut stream = session
-        .uid_store(uid.to_string(), &query)
+        .uid_store(uid_set, &query)
         .await
         .map_err(|e| Error::Imap(format!("uid_store: {e}")))?;
 

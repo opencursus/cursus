@@ -31,6 +31,13 @@ export interface MailFolder {
 
 export interface Thread {
   id: number;
+  /**
+   * IMAP UIDs of every message in the conversation (newest first). `id` is
+   * the newest of these. Flag changes that should cover the whole thread —
+   * mark-read above all — must act on all of them, not just `id`, or the
+   * unmarked members resurrect the unread state on the next sync.
+   */
+  memberUids: number[];
   accountId: number;
   folderId: number;
   subject: string;

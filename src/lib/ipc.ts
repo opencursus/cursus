@@ -160,6 +160,16 @@ export const ipc = {
     flags: string[],
     mode: FlagMode,
   ) => invoke<void>("imap_set_flags", { config, folder, uid, flags, mode }),
+  /** Same as imapSetFlags but for a whole conversation — one UID STORE over
+   *  the full UID set. Used by the mark-read paths so every message in a
+   *  multi-message thread gets \Seen, not just the newest. */
+  imapSetFlagsBulk: (
+    config: ImapConfig,
+    folder: string,
+    uids: number[],
+    flags: string[],
+    mode: FlagMode,
+  ) => invoke<void>("imap_set_flags_bulk", { config, folder, uids, flags, mode }),
   imapMoveUid: (
     config: ImapConfig,
     folder: string,

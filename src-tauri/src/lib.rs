@@ -175,6 +175,7 @@ pub fn run() {
             commands::imap_rename_folder,
             commands::imap_delete_folder,
             commands::imap_set_flags,
+            commands::imap_set_flags_bulk,
             commands::imap_move_uid,
             commands::smtp_test_connection,
             commands::smtp_send,
