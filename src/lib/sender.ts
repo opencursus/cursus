@@ -41,7 +41,7 @@ export interface SendOptions {
  * Build the From header per the same rules as Composer.buildFrom — kept in
  * sync by being a single function used by both call sites.
  */
-function buildFrom(displayName: string | null, email: string): string {
+export function buildFrom(displayName: string | null, email: string): string {
   const name = displayName?.trim();
   if (!name || name === email) return email;
   if (/[@<>,;:\\"]/.test(name)) {
@@ -49,6 +49,26 @@ function buildFrom(displayName: string | null, email: string): string {
     return `"${escaped}" <${email}>`;
   }
   return `${name} <${email}>`;
+}
+
+/**
+ * True for failures worth retrying automatically — network down, server
+ * unreachable, timeouts. Auth/config/recipient errors return false: retrying
+ * those would fail forever and the user has to intervene anyway.
+ */
+export function isTransientSendError(err: unknown): boolean {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
+  const msg = String(err).toLowerCase();
+  if (
+    /authentication|credentials|password|535|unauthorized|forbidden|api key|configuration|recipient|address/.test(
+      msg,
+    )
+  ) {
+    return false;
+  }
+  return /connect|connection|timed.?out|timeout|dns|lookup|network|unreachable|reset|refused|broken pipe|io error|error sending request|handshake|unexpected eof/.test(
+    msg,
+  );
 }
 
 export async function executeOutgoingSend(

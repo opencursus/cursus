@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose, Engine};
 use lettre::{
     message::{header::ContentType, Attachment, Mailbox, Message, MessageBuilder, MultiPart, SinglePart},
     transport::smtp::{authentication::Credentials, client::Tls, AsyncSmtpTransport},
@@ -124,7 +125,28 @@ pub fn build_message(outgoing: &OutgoingMessage) -> Result<Message> {
 
     let body = build_body(&outgoing.html, &outgoing.text)?;
 
-    let message = if outgoing.attachments.is_empty() {
+    // CID inline parts (pasted images) sit with the body in multipart/related;
+    // regular attachments wrap everything in multipart/mixed. Full shape:
+    // mixed( related( alternative(text, html), inline... ), regular... ).
+    let (inline, regular): (Vec<&OutgoingAttachment>, Vec<&OutgoingAttachment>) = outgoing
+        .attachments
+        .iter()
+        .partition(|a| a.content_id.is_some());
+
+    let body = if inline.is_empty() {
+        body
+    } else {
+        let mut related = match body {
+            MessageBody::Multi(mp) => MultiPart::related().multipart(mp),
+            MessageBody::Single(sp) => MultiPart::related().singlepart(sp),
+        };
+        for a in inline {
+            related = related.singlepart(build_inline_part(a)?);
+        }
+        MessageBody::Multi(related)
+    };
+
+    let message = if regular.is_empty() {
         match body {
             MessageBody::Multi(mp) => builder.multipart(mp),
             MessageBody::Single(sp) => builder.singlepart(sp),
@@ -134,7 +156,7 @@ pub fn build_message(outgoing: &OutgoingMessage) -> Result<Message> {
             MessageBody::Multi(mp) => MultiPart::mixed().multipart(mp),
             MessageBody::Single(sp) => MultiPart::mixed().singlepart(sp),
         };
-        for a in &outgoing.attachments {
+        for a in regular {
             mixed = mixed.singlepart(build_attachment_part(a)?);
         }
         builder.multipart(mixed)
@@ -177,10 +199,31 @@ fn build_body(html: &Option<String>, text: &Option<String>) -> Result<MessageBod
     }
 }
 
-fn build_attachment_part(a: &OutgoingAttachment) -> Result<SinglePart> {
-    let bytes = std::fs::read(&a.path)?;
+fn attachment_bytes(a: &OutgoingAttachment) -> Result<Vec<u8>> {
+    match &a.data_base64 {
+        Some(b64) => general_purpose::STANDARD
+            .decode(b64.as_bytes())
+            .map_err(|e| Error::Smtp(format!("decode attachment {}: {e}", a.filename))),
+        None => Ok(std::fs::read(&a.path)?),
+    }
+}
+
+fn attachment_content_type(a: &OutgoingAttachment) -> Result<ContentType> {
     let ct_str = a.content_type.as_deref().unwrap_or("application/octet-stream");
-    let content_type = ContentType::parse(ct_str)
-        .map_err(|e| Error::Smtp(format!("parse content-type {ct_str}: {e}")))?;
+    ContentType::parse(ct_str)
+        .map_err(|e| Error::Smtp(format!("parse content-type {ct_str}: {e}")))
+}
+
+fn build_attachment_part(a: &OutgoingAttachment) -> Result<SinglePart> {
+    let bytes = attachment_bytes(a)?;
+    let content_type = attachment_content_type(a)?;
     Ok(Attachment::new(a.filename.clone()).body(bytes, content_type))
+}
+
+fn build_inline_part(a: &OutgoingAttachment) -> Result<SinglePart> {
+    // Only called for attachments with a content_id (see partition above).
+    let cid = a.content_id.clone().unwrap_or_default();
+    let bytes = attachment_bytes(a)?;
+    let content_type = attachment_content_type(a)?;
+    Ok(Attachment::new_inline(cid).body(bytes, content_type))
 }

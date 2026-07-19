@@ -15,6 +15,7 @@ const KEY_LAUNCH_AT_LOGIN = "launch_at_login";
 const KEY_CLOSE_TO_TRAY = "close_to_tray";
 const KEY_UNDO_SEND_SEC = "undo_send_seconds";
 const KEY_CONFIRM_SEND = "confirm_before_send";
+const KEY_COMPOSE_COMPACT = "compose_compact_spacing";
 const KEY_DONT_MARK_READ = "dont_mark_read_on_open";
 const KEY_QUIET_HOURS_ENABLED = "quiet_hours_enabled";
 const KEY_QUIET_HOURS_START = "quiet_hours_start";
@@ -52,6 +53,10 @@ interface UiState {
   closeToTray: boolean;
   undoSendSeconds: number;
   confirmBeforeSend: boolean;
+  /** Composer: render paragraphs with no vertical gap and inline the same
+   *  tight spacing into outgoing HTML. Persisted — last choice becomes the
+   *  default for the next message. */
+  composeCompactSpacing: boolean;
   dontMarkReadOnOpen: boolean;
   quietHoursEnabled: boolean;
   /** "HH:MM", local time. Inclusive at start. */
@@ -87,6 +92,7 @@ interface UiState {
   setCloseToTray: (on: boolean) => void;
   setUndoSendSeconds: (sec: number) => void;
   setConfirmBeforeSend: (on: boolean) => void;
+  setComposeCompactSpacing: (on: boolean) => void;
   setDontMarkReadOnOpen: (on: boolean) => void;
   setQuietHoursEnabled: (on: boolean) => void;
   setQuietHoursStart: (hhmm: string) => void;
@@ -146,6 +152,7 @@ export const useUiStore = create<UiState>((set) => ({
   closeToTray: true,
   undoSendSeconds: 5,
   confirmBeforeSend: true,
+  composeCompactSpacing: false,
   dontMarkReadOnOpen: false,
   quietHoursEnabled: false,
   quietHoursStart: "22:00",
@@ -258,6 +265,10 @@ export const useUiStore = create<UiState>((set) => ({
     persist(KEY_CONFIRM_SEND, on ? "1" : "0");
     set({ confirmBeforeSend: on });
   },
+  setComposeCompactSpacing: (on) => {
+    persist(KEY_COMPOSE_COMPACT, on ? "1" : "0");
+    set({ composeCompactSpacing: on });
+  },
   openSearch: () => set({ searchOpen: true }),
   closeSearch: () => set({ searchOpen: false }),
   openMove: (threadId) => set({ moveTargetThreadId: threadId }),
@@ -343,6 +354,7 @@ export async function initializeUi(): Promise<void> {
       KEY_QUIET_HOURS_END,
       KEY_UNDO_SEND_SEC,
       KEY_CONFIRM_SEND,
+      KEY_COMPOSE_COMPACT,
     ]);
   } catch {
     // Fall through to defaults if the DB is unavailable.
@@ -386,6 +398,11 @@ export async function initializeUi(): Promise<void> {
     confirmStored == null
       ? useUiStore.getState().confirmBeforeSend
       : confirmStored !== "0";
+  const compactStored = stored[KEY_COMPOSE_COMPACT];
+  const composeCompactSpacing =
+    compactStored == null
+      ? useUiStore.getState().composeCompactSpacing
+      : compactStored === "1";
   const dmrStored = stored[KEY_DONT_MARK_READ];
   const dontMarkReadOnOpen =
     dmrStored == null ? useUiStore.getState().dontMarkReadOnOpen : dmrStored === "1";
@@ -415,6 +432,7 @@ export async function initializeUi(): Promise<void> {
     closeToTray,
     undoSendSeconds,
     confirmBeforeSend,
+    composeCompactSpacing,
     dontMarkReadOnOpen,
     quietHoursEnabled,
     quietHoursStart,

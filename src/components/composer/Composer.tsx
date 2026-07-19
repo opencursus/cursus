@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import Image from "@tiptap/extension-image";
+import type { EditorView } from "@tiptap/pm/view";
 import {
   X,
   Send,
@@ -17,6 +19,7 @@ import {
   Paperclip,
   FileText,
   Clock,
+  FoldVertical,
 } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/Button";
@@ -26,6 +29,7 @@ import { useAccountsStore } from "@/stores/accounts";
 import { useUiStore } from "@/stores/ui";
 import {
   deleteDraft,
+  deleteScheduledSend,
   findReplyDraft,
   getAccount,
   getAccountSecrets,
@@ -37,6 +41,9 @@ import {
   upsertContact,
   type DraftMode,
 } from "@/lib/db";
+import { isTransientSendError } from "@/lib/sender";
+import { drainOutboxNow } from "@/lib/outbox";
+import { buildOutgoingBody } from "@/lib/inlineImages";
 import { RecipientsField } from "@/components/composer/RecipientsField";
 import {
   ipc,
@@ -69,6 +76,9 @@ export function Composer() {
   const accounts = useAccountsStore((s) => s.accounts);
   const activeAccount = accounts.find((a) => a.id === activeAccountId);
 
+  const compactSpacing = useUiStore((s) => s.composeCompactSpacing);
+  const setCompactSpacing = useUiStore((s) => s.setComposeCompactSpacing);
+
   const [to, setTo] = useState("");
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
@@ -87,12 +97,15 @@ export function Composer() {
 
   const editor = useEditor(
     {
-      extensions: [StarterKit],
+      extensions: [StarterKit, Image.configure({ allowBase64: true })],
       content: "<p></p>",
       editorProps: {
         attributes: {
           class: "cursus-editor outline-none min-h-[220px] px-4 py-3 text-[13px] leading-relaxed",
         },
+        handlePaste: (view, event) => insertClipboardImages(view, event.clipboardData),
+        handleDrop: (view, event, _slice, moved) =>
+          !moved && insertClipboardImages(view, event.dataTransfer),
       },
     },
     [],
@@ -357,15 +370,53 @@ export function Composer() {
     let cancelled = false;
     const undoMs = undoSec * 1000;
 
-    const timeoutId = setTimeout(() => {
-      if (cancelled) return;
-      void performSend(snapshot, text, startedDraftId);
-    }, undoMs);
+    // Crash-safe undo window: the message is parked in scheduled_sends dated
+    // undoSec ahead. If the app dies before the window closes, the worker
+    // sends it on the next launch instead of silently losing it. When the
+    // window elapses we drain right away rather than waiting for the tick.
+    let rowId: number | null = null;
+    try {
+      const queuedBody = buildOutgoingBody(
+        applyComposeSpacing(snapshot.bodyHtml),
+        snapshot.attachments,
+      );
+      rowId = await insertScheduledSend({
+        accountId: snapshot.accountId,
+        payloadJson: JSON.stringify({
+          to: parseRecipients(snapshot.to),
+          cc: parseRecipients(snapshot.cc),
+          bcc: parseRecipients(snapshot.bcc),
+          subject: snapshot.subject,
+          html: queuedBody.html,
+          text,
+          attachments: queuedBody.attachments,
+        }),
+        mode: snapshot.mode,
+        replyUid: snapshot.inReplyToThread?.id ?? null,
+        draftId: startedDraftId,
+        scheduledAt: Math.floor(Date.now() / 1000) + undoSec,
+      });
+    } catch (err) {
+      flog.error("compose: undo-send queue failed, using in-memory timer:", err);
+      rowId = null;
+    }
+
+    const timeoutId = setTimeout(
+      () => {
+        if (cancelled) return;
+        if (rowId != null) drainOutboxNow();
+        else void performSend(snapshot, text, startedDraftId);
+      },
+      // The row's due time is floored to whole seconds — pad the drain so
+      // the worker actually finds it due.
+      rowId != null ? undoMs + 1200 : undoMs,
+    );
 
     // Visible per-second countdown so the user knows how long they have to
     // hit Undo. We push the toast first to capture its id, then tick it
     // down with a 1s interval until the timeout fires or Undo is hit.
     const startedAt = Date.now();
+    const queuedRowId = rowId;
     const toastId = toast.push({
       kind: "info",
       message: `Sending… ${undoSec}s`,
@@ -376,6 +427,11 @@ export function Composer() {
           cancelled = true;
           clearTimeout(timeoutId);
           clearInterval(tickId);
+          if (queuedRowId != null) {
+            void deleteScheduledSend(queuedRowId).catch((err) =>
+              flog.error("compose: undo failed to remove queued send:", err),
+            );
+          }
           useComposerStore.getState().reopenFromSnapshot(snapshot);
         },
       },
@@ -414,14 +470,18 @@ export function Composer() {
       return;
     }
 
+    const body = buildOutgoingBody(
+      applyComposeSpacing(html),
+      attachments.map((a) => ({ filename: a.filename, path: a.path })),
+    );
     const payload = {
       to: parseRecipients(to),
       cc: parseRecipients(cc),
       bcc: parseRecipients(bcc),
       subject,
-      html,
+      html: body.html,
       text,
-      attachments: attachments.map((a) => ({ filename: a.filename, path: a.path })),
+      attachments: body.attachments,
     };
 
     try {
@@ -452,6 +512,9 @@ export function Composer() {
       `compose: performSend start account=${snap.accountId} mode=${snap.mode} ` +
       `to=${snap.to} cc=${snap.cc} bcc=${snap.bcc} subj=${JSON.stringify(snap.subject)}`,
     );
+    // Lift pasted images out of the html into CID inline attachments — shared
+    // by the direct send and the offline-outbox fallback in the catch below.
+    const body = buildOutgoingBody(applyComposeSpacing(snap.bodyHtml), snap.attachments);
     try {
       const account = await getAccount(snap.accountId);
       if (!account) throw new Error("active account not found");
@@ -464,9 +527,9 @@ export function Composer() {
         cc: parseRecipients(snap.cc),
         bcc: parseRecipients(snap.bcc),
         subject: snap.subject,
-        html: snap.bodyHtml,
+        html: body.html,
         text,
-        attachments: snap.attachments,
+        attachments: body.attachments,
       };
 
       // Resolve the IMAP Sent folder for this account so the Rust side can
@@ -578,6 +641,38 @@ export function Composer() {
       toast.success("Message sent");
     } catch (err) {
       flog.error("compose: performSend failed:", err);
+      if (isTransientSendError(err)) {
+        // Network-shaped failure — park the message in the outbox
+        // (scheduled_sends, due now). The worker retries every minute and
+        // immediately when connectivity returns.
+        try {
+          await insertScheduledSend({
+            accountId: snap.accountId,
+            payloadJson: JSON.stringify({
+              to: parseRecipients(snap.to),
+              cc: parseRecipients(snap.cc),
+              bcc: parseRecipients(snap.bcc),
+              subject: snap.subject,
+              html: body.html,
+              text,
+              attachments: body.attachments,
+            }),
+            mode: snap.mode,
+            replyUid: snap.inReplyToThread?.id ?? null,
+            draftId: snapshotDraftId,
+            scheduledAt: Math.floor(Date.now() / 1000),
+          });
+          toast.push({
+            kind: "info",
+            message:
+              "No connection — message saved to Outbox and will send automatically.",
+            durationMs: 8000,
+          });
+          return;
+        } catch (queueErr) {
+          flog.error("compose: outbox enqueue failed:", queueErr);
+        }
+      }
       toast.error(`Send failed: ${err}`);
     } finally {
       setSending(false);
@@ -669,6 +764,8 @@ export function Composer() {
                 templates.length > 0 ? () => setTemplatesOpen((v) => !v) : null
               }
               templatesActive={templatesOpen}
+              compactSpacing={compactSpacing}
+              onToggleSpacing={() => setCompactSpacing(!compactSpacing)}
             />
             {templatesOpen && templates.length > 0 && (
               <div
@@ -727,7 +824,7 @@ export function Composer() {
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto">
+            <div className={cn("flex-1 overflow-y-auto", compactSpacing && "compose-compact")}>
               <EditorContent editor={editor} />
             </div>
 
@@ -771,6 +868,7 @@ export function Composer() {
 
       <style>{`
         .cursus-editor p { margin: 0 0 0.6em 0; }
+        .compose-compact .cursus-editor p { margin: 0; }
         .cursus-editor blockquote {
           border-left: 3px solid var(--border-strong);
           margin: 0.6em 0;
@@ -785,6 +883,8 @@ export function Composer() {
           background: rgba(128,128,128,0.12);
           padding: 1px 4px; border-radius: 3px; font-size: 0.92em;
         }
+        .cursus-editor img { max-width: 100%; height: auto; }
+        .cursus-editor img.ProseMirror-selectednode { outline: 2px solid var(--accent); }
       `}</style>
     </>
   );
@@ -795,11 +895,15 @@ function Toolbar({
   onAttach,
   onOpenTemplates,
   templatesActive,
+  compactSpacing,
+  onToggleSpacing,
 }: {
   editor: Editor | null;
   onAttach: () => void;
   onOpenTemplates: (() => void) | null;
   templatesActive: boolean;
+  compactSpacing: boolean;
+  onToggleSpacing: () => void;
 }) {
   if (!editor) return null;
   return (
@@ -816,6 +920,18 @@ function Toolbar({
       </ToolButton>
       <ToolButton active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
         <ListOrdered size={14} />
+      </ToolButton>
+      <Divider />
+      <ToolButton
+        active={compactSpacing}
+        onClick={onToggleSpacing}
+        title={
+          compactSpacing
+            ? "Line spacing: compact (click for normal)"
+            : "Line spacing: normal (click for compact)"
+        }
+      >
+        <FoldVertical size={13} />
       </ToolButton>
       <Divider />
       <ToolButton onClick={() => editor.chain().focus().undo().run()}>
@@ -919,6 +1035,44 @@ function HeaderIconButton({
 function basename(p: string): string {
   const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
   return idx >= 0 ? p.slice(idx + 1) : p;
+}
+
+const MAX_INLINE_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/** Insert pasted/dropped image files as base64 data URIs. Returns true when
+ *  image files were handled so TipTap skips its default paste/drop behavior.
+ *  The FileReader is async, so nodes land via the view rather than the
+ *  synchronous handler return path. */
+function insertClipboardImages(view: EditorView, data: DataTransfer | null): boolean {
+  const files = Array.from(data?.files ?? []).filter((f) => f.type.startsWith("image/"));
+  if (files.length === 0) return false;
+  for (const file of files) {
+    if (file.size > MAX_INLINE_IMAGE_BYTES) {
+      toast.error(`Image too large to embed (max 5 MB): ${file.name || "pasted image"}`);
+      continue;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = reader.result;
+      if (typeof src !== "string") return;
+      const node = view.state.schema.nodes.image?.create({ src });
+      if (node) view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView());
+    };
+    reader.readAsDataURL(file);
+  }
+  return true;
+}
+
+/** When compact spacing is on, inline `margin:0` on every paragraph so the
+ *  recipient's client renders the same tight spacing the editor showed.
+ *  Empty paragraphs get an explicit <br> so a deliberately blank line keeps
+ *  its height instead of collapsing to nothing. TipTap serializes paragraphs
+ *  as bare `<p>` (no attributes), so plain string replacement is safe here. */
+function applyComposeSpacing(html: string): string {
+  if (!useUiStore.getState().composeCompactSpacing) return html;
+  return html
+    .replace(/<p><\/p>/g, '<p style="margin:0"><br></p>')
+    .replace(/<p>/g, '<p style="margin:0">');
 }
 
 function parseRecipients(raw: string): string[] {

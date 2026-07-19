@@ -23,6 +23,11 @@ export interface OutgoingAttachment {
   filename: string;
   path: string;
   contentType?: string;
+  /** Base64 payload for in-memory attachments (inline images). When set,
+   *  the Rust side uses these bytes instead of reading `path`. */
+  dataBase64?: string;
+  /** Content-ID for CID inline parts — the html references `cid:<this>`. */
+  contentId?: string;
 }
 
 export interface OutgoingMessage {
@@ -251,6 +256,18 @@ export const ipc = {
   getLogsDir: () => invoke<string>("get_logs_dir"),
   logFrontend: (level: "info" | "warn" | "error" | "debug", message: string) =>
     invoke<void>("log_frontend", { level, message }),
+
+  /** Export a message verbatim: raw RFC822 bytes written to destPath (.eml). */
+  imapSaveRawMessage: (
+    config: ImapConfig,
+    folder: string,
+    uid: number,
+    destPath: string,
+  ) =>
+    invoke<void>("imap_save_raw_message", { config, folder, uid, destPath }),
+  /** Import a local .eml file: APPEND its bytes to the folder (unread). */
+  imapImportEml: (config: ImapConfig, folder: string, filePath: string) =>
+    invoke<void>("imap_import_eml", { config, folder, filePath }),
 };
 
 /** Payload of the `imap-update` event emitted from the Rust IDLE loop. */

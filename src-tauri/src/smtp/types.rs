@@ -45,9 +45,17 @@ pub struct OutgoingMessage {
 #[serde(rename_all = "camelCase")]
 pub struct OutgoingAttachment {
     pub filename: String,
+    #[serde(default)]
     pub path: String,
     #[serde(default)]
     pub content_type: Option<String>,
+    /// Base64 payload for in-memory attachments (inline images). When set,
+    /// the bytes come from here instead of reading `path`.
+    #[serde(default)]
+    pub data_base64: Option<String>,
+    /// Content-ID for CID inline parts — the html references `cid:<this>`.
+    #[serde(default)]
+    pub content_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

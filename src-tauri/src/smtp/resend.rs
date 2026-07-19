@@ -51,14 +51,21 @@ pub async fn send(
     if !outgoing.attachments.is_empty() {
         let mut items = Vec::with_capacity(outgoing.attachments.len());
         for a in &outgoing.attachments {
-            let bytes = std::fs::read(&a.path)?;
-            let content = general_purpose::STANDARD.encode(&bytes);
+            // In-memory attachments (inline images) already carry base64;
+            // path-backed ones are read and encoded here.
+            let content = match &a.data_base64 {
+                Some(b64) => b64.clone(),
+                None => general_purpose::STANDARD.encode(std::fs::read(&a.path)?),
+            };
             let mut entry = json!({
                 "filename": a.filename,
                 "content": content,
             });
             if let Some(ct) = &a.content_type {
                 entry["content_type"] = json!(ct);
+            }
+            if let Some(cid) = &a.content_id {
+                entry["content_id"] = json!(cid);
             }
             items.push(entry);
         }
