@@ -134,6 +134,25 @@ pub async fn imap_save_attachment(
 }
 
 #[tauri::command]
+pub async fn imap_save_raw_message(
+    config: ImapConfig,
+    folder: String,
+    uid: u32,
+    dest_path: String,
+) -> Result<()> {
+    imap::client::save_raw_message(&config, &folder, uid, &dest_path).await
+}
+
+#[tauri::command]
+pub async fn imap_import_eml(
+    config: ImapConfig,
+    folder: String,
+    file_path: String,
+) -> Result<()> {
+    imap::client::import_eml(&config, &folder, &file_path).await
+}
+
+#[tauri::command]
 pub async fn imap_create_folder(config: ImapConfig, name: String) -> Result<()> {
     imap::client::create_folder(&config, &name).await
 }

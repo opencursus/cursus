@@ -171,6 +171,8 @@ pub fn run() {
             commands::imap_fetch_unread,
             commands::imap_fetch_message_body,
             commands::imap_save_attachment,
+            commands::imap_save_raw_message,
+            commands::imap_import_eml,
             commands::imap_create_folder,
             commands::imap_rename_folder,
             commands::imap_delete_folder,

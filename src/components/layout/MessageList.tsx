@@ -10,12 +10,17 @@ import {
   X as XIcon,
   Check,
   CheckCheck,
+  FileUp,
   Search as SearchIcon,
 } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { cn } from "@/lib/cn";
+import { getAccount, getAccountSecrets } from "@/lib/db";
+import { ipc } from "@/lib/ipc";
 import { useAccountsStore } from "@/stores/accounts";
 import { useThreadsStore } from "@/stores/threads";
 import { useUiStore, type ListFilter, type ListSort } from "@/stores/ui";
+import { toast } from "@/stores/toasts";
 import { CategoryTabs } from "@/components/mail/CategoryTabs";
 import { MessageRow } from "@/components/mail/MessageRow";
 import {
@@ -185,6 +190,49 @@ export function MessageList() {
     }
   }
 
+  const [importing, setImporting] = useState(false);
+
+  // Import one or more .eml files into the active folder via IMAP APPEND.
+  // No \Seen flag on the Rust side, so imported mail arrives unread.
+  async function importEmlFiles() {
+    if (!activeAccountId || !activeFolder || importing) return;
+    try {
+      const picked = await openDialog({
+        multiple: true,
+        filters: [{ name: "Email", extensions: ["eml"] }],
+      });
+      if (!picked) return;
+      const paths = Array.isArray(picked) ? picked : [picked];
+      if (paths.length === 0) return;
+      setImporting(true);
+      const account = await getAccount(activeAccountId);
+      if (!account) throw new Error(`account ${activeAccountId} not found`);
+      const secrets = await getAccountSecrets(activeAccountId);
+      const config = {
+        host: account.imap_host,
+        port: account.imap_port,
+        username: account.imap_username ?? account.email,
+        password: secrets.imapPassword,
+        security: account.imap_security,
+      };
+      for (const path of paths) {
+        await ipc.imapImportEml(config, activeFolder.path, path);
+      }
+      toast.success(
+        `Imported ${paths.length} message${paths.length === 1 ? "" : "s"}`,
+      );
+      void useThreadsStore
+        .getState()
+        .fetchFolder(activeAccountId, activeFolder.path, activeFolder.id, {
+          silent: true,
+        });
+    } catch (e) {
+      toast.error(`Import failed: ${e}`);
+    } finally {
+      setImporting(false);
+    }
+  }
+
   // Marks every UNREAD thread that's currently visible (respects category
   // tab, starred view, and the Filters dropdown). Threads hidden by the
   // current filter are left alone.
@@ -272,6 +320,15 @@ export function MessageList() {
           <HeaderButton onClick={refresh} disabled={loading} title="Refresh">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </HeaderButton>
+          {activeFolder && activeFolder.id > 0 && (
+            <HeaderButton
+              onClick={() => void importEmlFiles()}
+              disabled={importing}
+              title="Import .eml files"
+            >
+              <FileUp size={14} className={importing ? "animate-pulse" : ""} />
+            </HeaderButton>
+          )}
           <HeaderButton
             onClick={markAllVisibleAsRead}
             disabled={visibleUnreadIds.length === 0}
