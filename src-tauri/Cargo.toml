@@ -1,6 +1,6 @@
 [package]
 name = "cursus"
-version = "0.1.1"
+version = "0.2.0"
 description = "Cursus — lightweight cross-platform email client"
 authors = ["Cursus contributors"]
 license = "Apache-2.0"
