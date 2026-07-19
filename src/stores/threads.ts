@@ -10,8 +10,8 @@ import {
   parseNameEmail,
   seedContact,
   updateMessageFlags,
-  upsertMessageSummary,
-  upsertSearchIndex,
+  upsertMessageSummariesBulk,
+  upsertSearchIndexBulk,
   type StoredAccount,
   type StoredMessage,
   type StoredRule,
@@ -108,6 +108,15 @@ function flagsHaveImportant(flags: string[]): boolean {
 // a notification when fetchFolder surfaces a genuinely new unread message.
 // Resets on app reload, which is fine: first fetch after launch is silent.
 const highestKnownUid = new Map<string, number>();
+
+// fetchFolder can be triggered by an IDLE push, the sync interval, a
+// visibility change and an online event all at once. The set skips redundant
+// concurrent syncs of the same folder; the generation counter stops a slow,
+// stale run (started before a newer run or a folder switch) from clobbering
+// state the newer run already wrote — e.g. resurrecting a server-side unread
+// flag that an optimistic markRead cleared in the meantime.
+const inFlightFolderFetch = new Set<string>();
+let folderFetchGeneration = 0;
 
 // ── Conversation threading (Union-Find over Message-ID / In-Reply-To /
 // References) ────────────────────────────────────────────────────────────
@@ -354,6 +363,72 @@ function safeParseJson(s: string): unknown {
   }
 }
 
+/**
+ * Persist a page of freshly fetched summaries: messages table + search
+ * index via the chunked bulk upserts, plus contact seeding for real
+ * senders. Replaces three copy-pasted per-message loops that cost one IPC
+ * round-trip per row per table. Failures are logged, never thrown — the
+ * next sync retries the same idempotent upserts.
+ */
+async function persistSummaries(
+  accountId: number,
+  folderId: number,
+  folderPath: string,
+  summaries: MessageSummary[],
+): Promise<void> {
+  if (summaries.length === 0) return;
+  // Synthetic folder ids (negative) would violate the messages FK — skip
+  // the messages table but still index for search (keyed by path, not id).
+  if (folderId > 0) {
+    await upsertMessageSummariesBulk(
+      summaries.map((s) => ({
+        accountId,
+        folderId,
+        imapUid: s.uid,
+        messageIdHeader: s.messageId || null,
+        inReplyTo: s.inReplyTo || null,
+        referencesHeader:
+          (s.references ?? []).length > 0 ? (s.references ?? []).join(" ") : null,
+        fromAddress: s.from,
+        toAddresses: s.to.join(", "),
+        subject: s.subject,
+        snippet: s.snippet,
+        receivedAt: s.date,
+        flags: s.flags,
+        isUnread: !s.flags.includes("Seen"),
+        isStarred: s.flags.includes("Flagged"),
+        isImportant: flagsHaveImportant(s.flags),
+        hasAttachments: s.hasAttachments,
+        isBulk: s.isBulk,
+        isAuto: s.isAuto,
+      })),
+    ).catch((err) => console.warn("upsertMessageSummariesBulk failed", err));
+  }
+  await upsertSearchIndexBulk(
+    summaries.map((s) => ({
+      accountId,
+      folderPath,
+      imapUid: s.uid,
+      subject: s.subject,
+      fromAddress: s.from,
+      toAddresses: s.to.join(", "),
+      snippet: s.snippet,
+      receivedAt: s.date,
+    })),
+  ).catch(() => {});
+  // Seed the composer autocomplete with real senders — skip newsletters
+  // and automated transactional mail so the pool stays clean. seedContact
+  // only adds new entries; it never bumps interaction_count.
+  for (const s of summaries) {
+    if (!s.isBulk && !s.isAuto && s.from) {
+      const parsed = parseNameEmail(s.from);
+      if (parsed) {
+        void seedContact(parsed.email, parsed.name).catch(() => {});
+      }
+    }
+  }
+}
+
 async function applyRulesToFresh(
   accountId: number,
   folderId: number,
@@ -435,147 +510,113 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
 
   fetchFolder: async (accountId, folderPath, folderId, options) => {
     const silent = options?.silent === true;
-    // Reset paging — refresh always re-fetches the freshest page.
-    pageCountByFolder.set(`${accountId}:${folderId}`, 1);
-
-    // ── Phase 1: cold-start from DB ────────────────────────────────────────
-    // Show whatever we previously persisted for this folder immediately, so
-    // opening a folder feels instant even on a slow IMAP server. Skipped for
-    // synthetic folder ids (negative) — those are placeholders that have
-    // never been resolved against the DB.
-    if (folderId > 0) {
-      try {
-        const cached = await listMessagesForFolder(folderId, 200);
-        if (cached.length > 0) {
-          set({
-            threads: groupMessagesIntoThreads(cached, accountId, folderId),
-            error: null,
-          });
-        }
-      } catch (err) {
-        console.warn("fetchFolder: cache load failed", err);
-      }
-    }
-
-    // ── Phase 2: refresh from IMAP ─────────────────────────────────────────
-    set((state) => (silent ? { ...state, error: null } : { ...state, loading: true, error: null }));
+    const flightKey = `${accountId}:${folderId}`;
+    // An identical sync is already running — let it finish instead of
+    // racing it (both would fetch the exact same page anyway).
+    if (inFlightFolderFetch.has(flightKey)) return;
+    inFlightFolderFetch.add(flightKey);
+    // Any newer fetchFolder call (same folder or a folder switch) bumps the
+    // generation; state writes from this run are dropped once it's stale.
+    const gen = ++folderFetchGeneration;
+    const current = () => gen === folderFetchGeneration;
     try {
-      const account = await getAccount(accountId);
-      if (!account) throw new Error(`account ${accountId} not found`);
-      const secrets = await getAccountSecrets(accountId);
-      const config = imapConfigFor(account, secrets.imapPassword);
+      // Reset paging — refresh always re-fetches the freshest page.
+      pageCountByFolder.set(flightKey, 1);
 
-      const summaries = await ipc.imapFetchMessages(config, folderPath, PAGE_SIZE, 0);
+      // ── Phase 1: cold-start from DB ──────────────────────────────────────
+      // Show whatever we previously persisted for this folder immediately, so
+      // opening a folder feels instant even on a slow IMAP server. Skipped for
+      // synthetic folder ids (negative) — those are placeholders that have
+      // never been resolved against the DB.
+      if (folderId > 0) {
+        try {
+          const cached = await listMessagesForFolder(folderId, 200);
+          if (cached.length > 0 && current()) {
+            set({
+              threads: groupMessagesIntoThreads(cached, accountId, folderId),
+              error: null,
+            });
+          }
+        } catch (err) {
+          console.warn("fetchFolder: cache load failed", err);
+        }
+      }
 
-      const threads = groupSummariesIntoThreads(summaries, accountId, folderId);
+      // ── Phase 2: refresh from IMAP ───────────────────────────────────────
+      if (current()) {
+        set((state) =>
+          silent ? { ...state, error: null } : { ...state, loading: true, error: null },
+        );
+      }
+      try {
+        const account = await getAccount(accountId);
+        if (!account) throw new Error(`account ${accountId} not found`);
+        const secrets = await getAccountSecrets(accountId);
+        const config = imapConfigFor(account, secrets.imapPassword);
 
-      // Whether a "Load more" button makes sense: if the page came back
-      // full (50), there's likely more behind it.
-      set({ hasMore: summaries.length >= PAGE_SIZE });
+        const summaries = await ipc.imapFetchMessages(config, folderPath, PAGE_SIZE, 0);
 
-      const key = `${accountId}:${folderId}`;
-      const prev = highestKnownUid.get(key);
-      const maxUid = threads.reduce((m, t) => (t.id > m ? t.id : m), 0);
-      if (prev !== undefined) {
-        const fresh = threads.filter((t) => t.id > prev && t.hasUnread);
-        if (fresh.length > 0) {
-          const newest = fresh[0];
-          if (newest) {
-            void notifyNewMail(
-              newest.subject,
-              newest.participants[0] ?? "Unknown",
-              fresh.length,
+        const threads = groupSummariesIntoThreads(summaries, accountId, folderId);
+
+        // Whether a "Load more" button makes sense: if the page came back
+        // full (50), there's likely more behind it.
+        if (current()) set({ hasMore: summaries.length >= PAGE_SIZE });
+
+        const prev = highestKnownUid.get(flightKey);
+        const maxUid = threads.reduce((m, t) => (t.id > m ? t.id : m), 0);
+        if (prev !== undefined) {
+          const fresh = threads.filter((t) => t.id > prev && t.hasUnread);
+          if (fresh.length > 0) {
+            const newest = fresh[0];
+            if (newest) {
+              void notifyNewMail(
+                newest.subject,
+                newest.participants[0] ?? "Unknown",
+                fresh.length,
+              );
+            }
+          }
+        }
+        if (maxUid > 0) highestKnownUid.set(flightKey, maxUid);
+
+        // ── Phase 3: persist to DB (bulk) + search index + contacts ────────
+        void persistSummaries(accountId, folderId, folderPath, summaries);
+
+        // ── Apply rules to genuinely new messages ──────────────────────────
+        // `prev` (set further up) is the high-water UID we'd seen before.
+        // Anything above that is fresh — eligible for rule actions. We apply
+        // rules *after* the DB upsert so move_to actions naturally invalidate
+        // the local row by deleting from this folder.
+        if (folderId > 0 && prev !== undefined) {
+          const fresh = summaries.filter((s) => s.uid > prev);
+          if (fresh.length > 0) {
+            void applyRulesToFresh(accountId, folderId, folderPath, fresh).catch(
+              (err) => console.warn("rules engine failed", err),
             );
           }
         }
-      }
-      if (maxUid > 0) highestKnownUid.set(key, maxUid);
 
-      // ── Phase 3: persist to DB ──────────────────────────────────────────
-      // Skip if we still have a synthetic folder id — would violate the FK.
-      // Should only happen on the very first sync of a brand-new account.
-      if (folderId > 0) {
-        for (const s of summaries) {
-          void upsertMessageSummary({
-            accountId,
-            folderId,
-            imapUid: s.uid,
-            messageIdHeader: s.messageId || null,
-            inReplyTo: s.inReplyTo || null,
-            referencesHeader: (s.references ?? []).length > 0 ? (s.references ?? []).join(" ") : null,
-            fromAddress: s.from,
-            toAddresses: s.to.join(", "),
-            subject: s.subject,
-            snippet: s.snippet,
-            receivedAt: s.date,
-            flags: s.flags,
-            isUnread: !s.flags.includes("Seen"),
-            isStarred: s.flags.includes("Flagged"),
-            isImportant: flagsHaveImportant(s.flags),
-            hasAttachments: s.hasAttachments,
-            isBulk: s.isBulk,
-            isAuto: s.isAuto,
-          }).catch((err) => console.warn("upsertMessageSummary failed", err));
-        }
-      }
-
-      // ── Apply rules to genuinely new messages ──────────────────────────
-      // `prev` (set further up) is the high-water UID we'd seen before.
-      // Anything above that is fresh — eligible for rule actions. We apply
-      // rules *after* the DB upsert so move_to actions naturally invalidate
-      // the local row by deleting from this folder.
-      if (folderId > 0 && prev !== undefined) {
-        const fresh = summaries.filter((s) => s.uid > prev);
-        if (fresh.length > 0) {
-          void applyRulesToFresh(accountId, folderId, folderPath, fresh).catch(
-            (err) => console.warn("rules engine failed", err),
+        if (current()) set({ threads, loading: false });
+      } catch (err) {
+        if (!current()) return;
+        // On a silent (background) refresh failure we keep the previous
+        // threads visible — a transient network blip during sync should not
+        // wipe the inbox the user is looking at.
+        if (silent) {
+          set({ error: String(err), loading: false });
+        } else {
+          // Non-silent failure with cached threads still visible? Keep them
+          // and surface only the error banner. Less destructive than wiping
+          // the list whenever the server hiccups.
+          set((state) =>
+            state.threads.length > 0
+              ? { ...state, error: String(err), loading: false }
+              : { ...state, error: String(err), loading: false, threads: [] },
           );
         }
       }
-
-      // Keep the existing search_index in lockstep so the search overlay
-      // continues to work without a code change. This duplicates the data
-      // until search migrates to messages_fts, which is acceptable for now.
-      for (const s of summaries) {
-        void upsertSearchIndex({
-          accountId,
-          folderPath,
-          imapUid: s.uid,
-          subject: s.subject,
-          fromAddress: s.from,
-          toAddresses: s.to.join(", "),
-          snippet: s.snippet,
-          receivedAt: s.date,
-        }).catch(() => {});
-
-        // Seed the composer autocomplete with real senders — skip newsletters
-        // and automated transactional mail so the pool stays clean. seedContact
-        // only adds new entries; it never bumps interaction_count.
-        if (!s.isBulk && !s.isAuto && s.from) {
-          const parsed = parseNameEmail(s.from);
-          if (parsed) {
-            void seedContact(parsed.email, parsed.name).catch(() => {});
-          }
-        }
-      }
-
-      set({ threads, loading: false });
-    } catch (err) {
-      // On a silent (background) refresh failure we keep the previous
-      // threads visible — a transient network blip during sync should not
-      // wipe the inbox the user is looking at.
-      if (silent) {
-        set({ error: String(err), loading: false });
-      } else {
-        // Non-silent failure with cached threads still visible? Keep them
-        // and surface only the error banner. Less destructive than wiping
-        // the list whenever the server hiccups.
-        set((state) =>
-          state.threads.length > 0
-            ? { ...state, error: String(err), loading: false }
-            : { ...state, error: String(err), loading: false, threads: [] },
-        );
-      }
+    } finally {
+      inFlightFolderFetch.delete(flightKey);
     }
   },
 
@@ -591,43 +632,9 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
       const summaries = await ipc.imapFetchUnread(config, folderPath, 500);
 
       // Persist into the same messages table so the cache picks them up on
-      // next cold-start. Same shape as fetchFolder's persist branch.
-      if (folderId > 0) {
-        for (const s of summaries) {
-          void upsertMessageSummary({
-            accountId,
-            folderId,
-            imapUid: s.uid,
-            messageIdHeader: s.messageId || null,
-            inReplyTo: s.inReplyTo || null,
-            referencesHeader:
-              (s.references ?? []).length > 0 ? (s.references ?? []).join(" ") : null,
-            fromAddress: s.from,
-            toAddresses: s.to.join(", "),
-            subject: s.subject,
-            snippet: s.snippet,
-            receivedAt: s.date,
-            flags: s.flags,
-            isUnread: !s.flags.includes("Seen"),
-            isStarred: s.flags.includes("Flagged"),
-            isImportant: flagsHaveImportant(s.flags),
-            hasAttachments: s.hasAttachments,
-            isBulk: s.isBulk,
-            isAuto: s.isAuto,
-          }).catch(() => {});
-
-          void upsertSearchIndex({
-            accountId,
-            folderPath,
-            imapUid: s.uid,
-            subject: s.subject,
-            fromAddress: s.from,
-            toAddresses: s.to.join(", "),
-            snippet: s.snippet,
-            receivedAt: s.date,
-          }).catch(() => {});
-        }
-      }
+      // next cold-start. Awaited so the re-cohort below reads a DB that
+      // already includes this batch.
+      await persistSummaries(accountId, folderId, folderPath, summaries);
 
       // Re-cohort the merged set (cached + just-fetched) so threading is
       // consistent across the boundary. The DB read covers everything.
@@ -678,42 +685,9 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
         offset,
       );
 
-      // Persist the new page so the merged view + future cold-start include it.
-      if (folderId > 0) {
-        for (const s of summaries) {
-          void upsertMessageSummary({
-            accountId,
-            folderId,
-            imapUid: s.uid,
-            messageIdHeader: s.messageId || null,
-            inReplyTo: s.inReplyTo || null,
-            referencesHeader: (s.references ?? []).length > 0 ? (s.references ?? []).join(" ") : null,
-            fromAddress: s.from,
-            toAddresses: s.to.join(", "),
-            subject: s.subject,
-            snippet: s.snippet,
-            receivedAt: s.date,
-            flags: s.flags,
-            isUnread: !s.flags.includes("Seen"),
-            isStarred: s.flags.includes("Flagged"),
-            isImportant: flagsHaveImportant(s.flags),
-            hasAttachments: s.hasAttachments,
-            isBulk: s.isBulk,
-            isAuto: s.isAuto,
-          }).catch(() => {});
-
-          void upsertSearchIndex({
-            accountId,
-            folderPath,
-            imapUid: s.uid,
-            subject: s.subject,
-            fromAddress: s.from,
-            toAddresses: s.to.join(", "),
-            snippet: s.snippet,
-            receivedAt: s.date,
-          }).catch(() => {});
-        }
-      }
+      // Persist the new page so the merged view + future cold-start include
+      // it. Awaited so the re-cohort below reads a DB that already has it.
+      await persistSummaries(accountId, folderId, folderPath, summaries);
 
       // Re-cohort everything we have on disk so threading stays correct
       // when an old reply belongs to an already-loaded family. Limit doubles
@@ -834,6 +808,7 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
         void updateMessageFlags(thread.folderId, thread.id, { isStarred: !nextPinned }).catch(() => {});
       }
       console.error("toggleStar failed:", err);
+      toast.error(`Star failed: ${err}`);
       throw err;
     }
   },
@@ -871,6 +846,7 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
         void updateMessageFlags(thread.folderId, thread.id, { isImportant: !nextImportant }).catch(() => {});
       }
       console.error("toggleImportance failed:", err);
+      toast.error(`Importance failed: ${err}`);
       throw err;
     }
   },
@@ -908,9 +884,12 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
       // most servers accept as a literal — failing that the keyword
       // simply stays and gets cleared by the periodic checker once we
       // have flags.
-      await ipc.imapSetFlags(config, folderPath, thread.id, SNOOZE_REMOVE_GLOBS, "remove").catch(() => {});
+      await ipc.imapSetFlags(config, folderPath, thread.id, SNOOZE_REMOVE_GLOBS, "remove");
     } catch (err) {
+      // Surfaced, not swallowed: a failed unsnooze means the thread stays
+      // hidden past its wake time with no other signal to the user.
       console.warn("unsnoozeThread failed:", err);
+      toast.error(`Unsnooze failed: ${err}`);
     }
   },
 
@@ -1231,19 +1210,35 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
         idSet.has(t.id) ? { ...t, isPinned: nextPinned } : t,
       ),
     }));
+    const failed: Thread[] = [];
     await runBulk(targets, async (thread) => {
-      const { config, folderPath } = await sessionFor(thread);
-      await ipc.imapSetFlags(
-        config,
-        folderPath,
-        thread.id,
-        ["\\Flagged"],
-        nextPinned ? "add" : "remove",
-      );
-      if (thread.folderId > 0) {
-        void updateMessageFlags(thread.folderId, thread.id, { isStarred: nextPinned }).catch(() => {});
+      try {
+        const { config, folderPath } = await sessionFor(thread);
+        await ipc.imapSetFlags(
+          config,
+          folderPath,
+          thread.id,
+          ["\\Flagged"],
+          nextPinned ? "add" : "remove",
+        );
+        if (thread.folderId > 0) {
+          void updateMessageFlags(thread.folderId, thread.id, { isStarred: nextPinned }).catch(() => {});
+        }
+      } catch (err) {
+        failed.push(thread);
+        console.error("toggleStarMany: thread failed:", err);
       }
     });
+    if (failed.length > 0) {
+      // Revert the optimistic flip on the ones the server rejected.
+      const failedIds = new Set(failed.map((t) => t.id));
+      set((state) => ({
+        threads: state.threads.map((t) =>
+          failedIds.has(t.id) ? { ...t, isPinned: !nextPinned } : t,
+        ),
+      }));
+      toast.error(`Star failed for ${failed.length} of ${targets.length}`);
+    }
   },
 }));
 

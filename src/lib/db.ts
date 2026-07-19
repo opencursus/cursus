@@ -696,6 +696,52 @@ export async function upsertSearchIndex(e: SearchIndexEntry): Promise<void> {
   );
 }
 
+/**
+ * Multi-row variant of upsertSearchIndex. A 50-message sync page used to
+ * cost one IPC round-trip per row; this collapses it to one statement per
+ * chunk. Chunk size keeps bound parameters under SQLite's 999 floor.
+ */
+export async function upsertSearchIndexBulk(entries: SearchIndexEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  const db = await getDb();
+  const COLS = 8;
+  const CHUNK = 100;
+  for (let i = 0; i < entries.length; i += CHUNK) {
+    const chunk = entries.slice(i, i + CHUNK);
+    const placeholders: string[] = [];
+    const params: unknown[] = [];
+    chunk.forEach((e, r) => {
+      const base = r * COLS;
+      placeholders.push(
+        `(${Array.from({ length: COLS }, (_, c) => `$${base + c + 1}`).join(",")})`,
+      );
+      params.push(
+        e.accountId,
+        e.folderPath,
+        e.imapUid,
+        e.subject,
+        e.fromAddress,
+        e.toAddresses,
+        e.snippet,
+        e.receivedAt,
+      );
+    });
+    await db.execute(
+      `INSERT INTO search_index (
+         account_id, folder_path, imap_uid,
+         subject, from_address, to_addresses, snippet, received_at
+       ) VALUES ${placeholders.join(",")}
+       ON CONFLICT(account_id, folder_path, imap_uid) DO UPDATE SET
+         subject = excluded.subject,
+         from_address = excluded.from_address,
+         to_addresses = excluded.to_addresses,
+         snippet = excluded.snippet,
+         received_at = excluded.received_at`,
+      params,
+    );
+  }
+}
+
 export async function upsertSearchBody(
   accountId: number,
   folderPath: string,
@@ -972,6 +1018,82 @@ export async function upsertMessageSummary(input: UpsertMessageInput): Promise<v
   );
 }
 
+/**
+ * Multi-row variant of upsertMessageSummary — same column set and conflict
+ * clause, chunked so one sync page lands in a couple of statements instead
+ * of ~50 sequential IPC round-trips. 20 params/row × 40 rows = 800 bound
+ * parameters, safely under SQLite's 999 floor.
+ */
+export async function upsertMessageSummariesBulk(
+  inputs: UpsertMessageInput[],
+): Promise<void> {
+  if (inputs.length === 0) return;
+  const db = await getDb();
+  const COLS = 20;
+  const CHUNK = 40;
+  for (let i = 0; i < inputs.length; i += CHUNK) {
+    const chunk = inputs.slice(i, i + CHUNK);
+    const placeholders: string[] = [];
+    const params: unknown[] = [];
+    chunk.forEach((input, r) => {
+      const base = r * COLS;
+      placeholders.push(
+        `(${Array.from({ length: COLS }, (_, c) => `$${base + c + 1}`).join(",")})`,
+      );
+      params.push(
+        input.accountId,
+        input.folderId,
+        input.imapUid,
+        input.messageIdHeader ?? null,
+        input.inReplyTo ?? null,
+        input.referencesHeader ?? null,
+        input.fromAddress,
+        input.toAddresses,
+        input.ccAddresses ?? null,
+        input.bccAddresses ?? null,
+        input.subject,
+        input.snippet,
+        input.receivedAt,
+        JSON.stringify(input.flags),
+        input.isUnread ? 1 : 0,
+        input.isStarred ? 1 : 0,
+        input.isImportant ? 1 : 0,
+        input.hasAttachments ? 1 : 0,
+        input.isBulk ? 1 : 0,
+        input.isAuto ? 1 : 0,
+      );
+    });
+    await db.execute(
+      `INSERT INTO messages (
+         account_id, folder_id, imap_uid,
+         message_id_header, in_reply_to, references_header,
+         from_address, to_addresses, cc_addresses, bcc_addresses,
+         subject, snippet, received_at, flags,
+         is_unread, is_starred, is_important, has_attachments, is_bulk, is_auto
+       ) VALUES ${placeholders.join(",")}
+       ON CONFLICT(account_id, folder_id, imap_uid) DO UPDATE SET
+         message_id_header = COALESCE(excluded.message_id_header, messages.message_id_header),
+         in_reply_to = COALESCE(excluded.in_reply_to, messages.in_reply_to),
+         references_header = COALESCE(excluded.references_header, messages.references_header),
+         from_address = excluded.from_address,
+         to_addresses = excluded.to_addresses,
+         cc_addresses = excluded.cc_addresses,
+         bcc_addresses = excluded.bcc_addresses,
+         subject = excluded.subject,
+         snippet = excluded.snippet,
+         received_at = excluded.received_at,
+         flags = excluded.flags,
+         is_unread = excluded.is_unread,
+         is_starred = excluded.is_starred,
+         is_important = excluded.is_important,
+         has_attachments = excluded.has_attachments,
+         is_bulk = excluded.is_bulk,
+         is_auto = excluded.is_auto`,
+      params,
+    );
+  }
+}
+
 export async function listMessagesForFolder(
   folderId: number,
   limit = 50,
@@ -1024,6 +1146,23 @@ export async function updateMessageFlags(
     `UPDATE messages SET ${sets.join(", ")}
       WHERE folder_id = $${i++} AND imap_uid = $${i++}`,
     params,
+  );
+}
+
+/**
+ * Replace the raw IMAP flags blob of one message. Used by the snooze
+ * checker to strip expired `Cursus-SnoozedUntil:*` keywords locally so the
+ * thread re-surfaces immediately instead of waiting for the next sync.
+ */
+export async function replaceMessageFlags(
+  folderId: number,
+  imapUid: number,
+  flags: string[],
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE messages SET flags = $1 WHERE folder_id = $2 AND imap_uid = $3`,
+    [JSON.stringify(flags), folderId, imapUid],
   );
 }
 
@@ -1182,6 +1321,13 @@ export async function insertScheduledSend(input: ScheduledSendInput): Promise<nu
     ],
   );
   return Number(result.lastInsertId);
+}
+
+export async function listScheduledSends(): Promise<StoredScheduledSend[]> {
+  const db = await getDb();
+  return db.select<StoredScheduledSend[]>(
+    `SELECT * FROM scheduled_sends ORDER BY scheduled_at ASC`,
+  );
 }
 
 export async function listDueScheduledSends(now: number): Promise<StoredScheduledSend[]> {
