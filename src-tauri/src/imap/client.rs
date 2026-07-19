@@ -1,15 +1,18 @@
 use async_imap::Session;
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use mail_parser::MessageParser;
 use native_tls::TlsConnector;
 use tokio::net::TcpStream;
 use tokio_native_tls::TlsStream;
 
+use super::pool;
 use super::types::{FlagMode, Folder, FolderStatus, ImapConfig, ImapSecurity, MessageBody, MessageSummary};
 use crate::error::{Error, Result};
 
-type TlsSession = Session<TlsStream<TcpStream>>;
+pub(crate) type TlsSession = Session<TlsStream<TcpStream>>;
 
+/// Deliberately NOT pooled: this is the credential check used by account
+/// setup, so it must exercise a full fresh TCP + TLS + LOGIN round-trip.
 pub async fn test_connection(config: &ImapConfig) -> Result<()> {
     let mut session = connect(config).await?;
     session
@@ -20,46 +23,53 @@ pub async fn test_connection(config: &ImapConfig) -> Result<()> {
 }
 
 pub async fn list_folders(config: &ImapConfig) -> Result<Vec<Folder>> {
-    let mut session = connect(config).await?;
-    let mut stream = session
-        .list(Some(""), Some("*"))
-        .await
-        .map_err(|e| Error::Imap(format!("list: {e}")))?;
+    pool::with_session(config, |session| {
+        async move {
+            let mut stream = session
+                .list(Some(""), Some("*"))
+                .await
+                .map_err(|e| Error::Imap(format!("list: {e}")))?;
 
-    let mut folders = Vec::new();
-    while let Some(item) = stream.next().await {
-        let entry = item.map_err(|e| Error::Imap(format!("list item: {e}")))?;
-        folders.push(Folder {
-            name: entry.name().to_string(),
-            path: entry.name().to_string(),
-            delimiter: entry.delimiter().map(str::to_string),
-            flags: entry
-                .attributes()
-                .iter()
-                .map(name_attribute_label)
-                .collect(),
-        });
-    }
-    drop(stream);
-
-    session
-        .logout()
-        .await
-        .map_err(|e| Error::Imap(format!("logout: {e}")))?;
-    Ok(folders)
+            let mut folders = Vec::new();
+            while let Some(item) = stream.next().await {
+                let entry = item.map_err(|e| Error::Imap(format!("list item: {e}")))?;
+                folders.push(Folder {
+                    name: entry.name().to_string(),
+                    path: entry.name().to_string(),
+                    delimiter: entry.delimiter().map(str::to_string),
+                    flags: entry
+                        .attributes()
+                        .iter()
+                        .map(name_attribute_label)
+                        .collect(),
+                });
+            }
+            Ok(folders)
+        }
+        .boxed()
+    })
+    .await
 }
 
 pub async fn folder_status(config: &ImapConfig, folder: &str) -> Result<FolderStatus> {
-    let mut session = connect(config).await?;
-    let mbox = session
-        .status(folder, "(UNSEEN MESSAGES)")
-        .await
-        .map_err(|e| Error::Imap(format!("status {folder}: {e}")))?;
-    let _ = session.logout().await;
-    Ok(FolderStatus {
-        unseen: mbox.unseen.unwrap_or(0),
-        total: mbox.exists,
+    pool::with_session(config, |session| {
+        // Owned clones per attempt: the returned future may not borrow from
+        // this fn's arguments (with_session's HRTB requires the future to
+        // borrow only from the session). Same pattern in every op below.
+        let folder = folder.to_string();
+        async move {
+            let mbox = session
+                .status(&folder, "(UNSEEN MESSAGES)")
+                .await
+                .map_err(|e| Error::Imap(format!("status {folder}: {e}")))?;
+            Ok(FolderStatus {
+                unseen: mbox.unseen.unwrap_or(0),
+                total: mbox.exists,
+            })
+        }
+        .boxed()
     })
+    .await
 }
 
 pub async fn fetch_messages(
@@ -68,37 +78,43 @@ pub async fn fetch_messages(
     limit: u32,
     offset: u32,
 ) -> Result<Vec<MessageSummary>> {
-    let mut session = connect(config).await?;
-    let mailbox = session
-        .select(folder)
-        .await
-        .map_err(|e| Error::Imap(format!("select {folder}: {e}")))?;
+    let mut summaries = pool::with_session(config, |session| {
+        let folder = folder.to_string();
+        async move {
+            // SELECT runs on every call (not cached by the pool) because the
+            // pagination below needs the fresh EXISTS count it returns.
+            let mailbox = session
+                .select(&folder)
+                .await
+                .map_err(|e| Error::Imap(format!("select {folder}: {e}")))?;
 
-    let exists = mailbox.exists;
-    if exists == 0 || offset >= exists {
-        let _ = session.logout().await;
-        return Ok(Vec::new());
-    }
+            let exists = mailbox.exists;
+            if exists == 0 || offset >= exists {
+                return Ok(Vec::new());
+            }
 
-    // `offset` skips the most-recent N messages — the inbox is fetched
-    // newest-first in pages of `limit`. Pages further back than `exists`
-    // bottom out at sequence 1.
-    let end = exists.saturating_sub(offset);
-    let start = end.saturating_sub(limit.saturating_sub(1)).max(1);
-    let query = format!("{start}:{end}");
+            // `offset` skips the most-recent N messages — the inbox is fetched
+            // newest-first in pages of `limit`. Pages further back than `exists`
+            // bottom out at sequence 1.
+            let end = exists.saturating_sub(offset);
+            let start = end.saturating_sub(limit.saturating_sub(1)).max(1);
+            let query = format!("{start}:{end}");
 
-    let mut stream = session
-        .fetch(&query, "(UID FLAGS INTERNALDATE RFC822.HEADER)")
-        .await
-        .map_err(|e| Error::Imap(format!("fetch: {e}")))?;
+            let mut stream = session
+                .fetch(&query, "(UID FLAGS INTERNALDATE RFC822.HEADER)")
+                .await
+                .map_err(|e| Error::Imap(format!("fetch: {e}")))?;
 
-    let mut summaries: Vec<MessageSummary> = Vec::new();
-    while let Some(item) = stream.next().await {
-        let fetch = item.map_err(|e| Error::Imap(format!("fetch item: {e}")))?;
-        summaries.push(summary_from(&fetch));
-    }
-    drop(stream);
-    let _ = session.logout().await;
+            let mut summaries: Vec<MessageSummary> = Vec::new();
+            while let Some(item) = stream.next().await {
+                let fetch = item.map_err(|e| Error::Imap(format!("fetch item: {e}")))?;
+                summaries.push(summary_from(&fetch));
+            }
+            Ok(summaries)
+        }
+        .boxed()
+    })
+    .await?;
 
     summaries.sort_by(|a, b| b.date.cmp(&a.date));
     Ok(summaries)
@@ -113,43 +129,48 @@ pub async fn fetch_unread(
     folder: &str,
     limit: u32,
 ) -> Result<Vec<MessageSummary>> {
-    let mut session = connect(config).await?;
-    session
-        .select(folder)
-        .await
-        .map_err(|e| Error::Imap(format!("select {folder}: {e}")))?;
+    let mut summaries = pool::with_session(config, |session| {
+        let folder = folder.to_string();
+        async move {
+            session
+                .select(&folder)
+                .await
+                .map_err(|e| Error::Imap(format!("select {folder}: {e}")))?;
 
-    let uids = session
-        .uid_search("UNSEEN")
-        .await
-        .map_err(|e| Error::Imap(format!("uid_search UNSEEN: {e}")))?;
+            let uids = session
+                .uid_search("UNSEEN")
+                .await
+                .map_err(|e| Error::Imap(format!("uid_search UNSEEN: {e}")))?;
 
-    if uids.is_empty() {
-        let _ = session.logout().await;
-        return Ok(Vec::new());
-    }
+            if uids.is_empty() {
+                return Ok(Vec::new());
+            }
 
-    // Cap at `limit` newest UIDs so we don't pull thousands at once for
-    // accounts with massive unread counts. Sorted descending so the cap
-    // keeps the most recent ones.
-    let mut sorted: Vec<u32> = uids.into_iter().collect();
-    sorted.sort_unstable_by(|a, b| b.cmp(a));
-    let take = limit.min(sorted.len() as u32) as usize;
-    let chosen: Vec<String> = sorted.into_iter().take(take).map(|u| u.to_string()).collect();
-    let query = chosen.join(",");
+            // Cap at `limit` newest UIDs so we don't pull thousands at once for
+            // accounts with massive unread counts. Sorted descending so the cap
+            // keeps the most recent ones.
+            let mut sorted: Vec<u32> = uids.into_iter().collect();
+            sorted.sort_unstable_by(|a, b| b.cmp(a));
+            let take = limit.min(sorted.len() as u32) as usize;
+            let chosen: Vec<String> =
+                sorted.into_iter().take(take).map(|u| u.to_string()).collect();
+            let query = chosen.join(",");
 
-    let mut stream = session
-        .uid_fetch(&query, "(UID FLAGS INTERNALDATE RFC822.HEADER)")
-        .await
-        .map_err(|e| Error::Imap(format!("uid_fetch: {e}")))?;
+            let mut stream = session
+                .uid_fetch(&query, "(UID FLAGS INTERNALDATE RFC822.HEADER)")
+                .await
+                .map_err(|e| Error::Imap(format!("uid_fetch: {e}")))?;
 
-    let mut summaries: Vec<MessageSummary> = Vec::new();
-    while let Some(item) = stream.next().await {
-        let fetch = item.map_err(|e| Error::Imap(format!("fetch item: {e}")))?;
-        summaries.push(summary_from(&fetch));
-    }
-    drop(stream);
-    let _ = session.logout().await;
+            let mut summaries: Vec<MessageSummary> = Vec::new();
+            while let Some(item) = stream.next().await {
+                let fetch = item.map_err(|e| Error::Imap(format!("fetch item: {e}")))?;
+                summaries.push(summary_from(&fetch));
+            }
+            Ok(summaries)
+        }
+        .boxed()
+    })
+    .await?;
 
     summaries.sort_by(|a, b| b.date.cmp(&a.date));
     Ok(summaries)
@@ -167,7 +188,7 @@ pub async fn set_flags(
 
 /// Apply a flag change to a set of UIDs in one `UID STORE`. Used for marking
 /// a whole conversation read in a single round-trip rather than one
-/// connection per message.
+/// operation per message.
 pub async fn set_flags_bulk(
     config: &ImapConfig,
     folder: &str,
@@ -178,12 +199,6 @@ pub async fn set_flags_bulk(
     if uids.is_empty() {
         return Ok(());
     }
-    let mut session = connect(config).await?;
-    session
-        .select(folder)
-        .await
-        .map_err(|e| Error::Imap(format!("select {folder}: {e}")))?;
-
     let flag_list = flags.join(" ");
     let prefix = match mode {
         FlagMode::Add => "+FLAGS",
@@ -197,17 +212,28 @@ pub async fn set_flags_bulk(
         .collect::<Vec<_>>()
         .join(",");
 
-    let mut stream = session
-        .uid_store(uid_set, &query)
-        .await
-        .map_err(|e| Error::Imap(format!("uid_store: {e}")))?;
+    pool::with_session(config, |session| {
+        let folder = folder.to_string();
+        let query = query.clone();
+        let uid_set = uid_set.clone();
+        async move {
+            session
+                .select(&folder)
+                .await
+                .map_err(|e| Error::Imap(format!("select {folder}: {e}")))?;
 
-    // Drain the stream so the command completes on the wire.
-    while stream.next().await.is_some() {}
-    drop(stream);
+            let mut stream = session
+                .uid_store(uid_set, &query)
+                .await
+                .map_err(|e| Error::Imap(format!("uid_store: {e}")))?;
 
-    let _ = session.logout().await;
-    Ok(())
+            // Drain the stream so the command completes on the wire.
+            while stream.next().await.is_some() {}
+            Ok(())
+        }
+        .boxed()
+    })
+    .await
 }
 
 pub async fn move_uid(
@@ -216,40 +242,45 @@ pub async fn move_uid(
     dest_folder: &str,
     uid: u32,
 ) -> Result<()> {
-    let mut session = connect(config).await?;
-    session
-        .select(folder)
-        .await
-        .map_err(|e| Error::Imap(format!("select {folder}: {e}")))?;
-
-    // Try RFC 6851 UID MOVE first (supported by Dovecot, Gmail, Cyrus, etc).
-    match session.uid_mv(uid.to_string(), dest_folder).await {
-        Ok(_) => {}
-        Err(_move_err) => {
-            // Fallback: COPY + STORE +FLAGS \Deleted + EXPUNGE.
+    pool::with_session(config, |session| {
+        let folder = folder.to_string();
+        let dest_folder = dest_folder.to_string();
+        async move {
             session
-                .uid_copy(uid.to_string(), dest_folder)
+                .select(&folder)
                 .await
-                .map_err(|e| Error::Imap(format!("uid_copy: {e}")))?;
+                .map_err(|e| Error::Imap(format!("select {folder}: {e}")))?;
 
-            let mut store = session
-                .uid_store(uid.to_string(), "+FLAGS (\\Deleted)")
-                .await
-                .map_err(|e| Error::Imap(format!("uid_store: {e}")))?;
-            while store.next().await.is_some() {}
-            drop(store);
+            // Try RFC 6851 UID MOVE first (supported by Dovecot, Gmail, Cyrus, etc).
+            match session.uid_mv(uid.to_string(), &dest_folder).await {
+                Ok(_) => {}
+                Err(_move_err) => {
+                    // Fallback: COPY + STORE +FLAGS \Deleted + EXPUNGE.
+                    session
+                        .uid_copy(uid.to_string(), &dest_folder)
+                        .await
+                        .map_err(|e| Error::Imap(format!("uid_copy: {e}")))?;
 
-            let expunge = session
-                .uid_expunge(uid.to_string())
-                .await
-                .map_err(|e| Error::Imap(format!("uid_expunge: {e}")))?;
-            let mut expunge = Box::pin(expunge);
-            while expunge.next().await.is_some() {}
+                    let mut store = session
+                        .uid_store(uid.to_string(), "+FLAGS (\\Deleted)")
+                        .await
+                        .map_err(|e| Error::Imap(format!("uid_store: {e}")))?;
+                    while store.next().await.is_some() {}
+                    drop(store);
+
+                    let expunge = session
+                        .uid_expunge(uid.to_string())
+                        .await
+                        .map_err(|e| Error::Imap(format!("uid_expunge: {e}")))?;
+                    let mut expunge = Box::pin(expunge);
+                    while expunge.next().await.is_some() {}
+                }
+            }
+            Ok(())
         }
-    }
-
-    let _ = session.logout().await;
-    Ok(())
+        .boxed()
+    })
+    .await
 }
 
 pub async fn fetch_message_body(
@@ -274,34 +305,78 @@ pub async fn save_attachment(
     Ok(())
 }
 
-pub async fn create_folder(config: &ImapConfig, name: &str) -> Result<()> {
-    let mut session = connect(config).await?;
-    session
-        .create(name)
-        .await
-        .map_err(|e| Error::Imap(format!("create {name}: {e}")))?;
-    let _ = session.logout().await;
+/// Export a message verbatim: fetch the raw RFC822 bytes and write them to
+/// `dest_path` as a standalone .eml file. Same fetch path as the body
+/// parser, minus the parsing.
+pub async fn save_raw_message(
+    config: &ImapConfig,
+    folder: &str,
+    uid: u32,
+    dest_path: &str,
+) -> Result<()> {
+    let bytes = fetch_raw_message(config, folder, uid).await?;
+    std::fs::write(dest_path, &bytes)?;
     Ok(())
+}
+
+/// Import a local .eml file: read the raw bytes and APPEND them to `folder`.
+/// No `\Seen` flag — imported mail should surface as unread.
+pub async fn import_eml(config: &ImapConfig, folder: &str, file_path: &str) -> Result<()> {
+    let bytes = std::fs::read(file_path)?;
+    append_message(config, folder, &bytes, &[]).await
+}
+
+pub async fn create_folder(config: &ImapConfig, name: &str) -> Result<()> {
+    pool::with_session(config, |session| {
+        let name = name.to_string();
+        async move {
+            session
+                .create(&name)
+                .await
+                .map_err(|e| Error::Imap(format!("create {name}: {e}")))?;
+            Ok(())
+        }
+        .boxed()
+    })
+    .await
 }
 
 pub async fn rename_folder(config: &ImapConfig, from: &str, to: &str) -> Result<()> {
-    let mut session = connect(config).await?;
-    session
-        .rename(from, to)
-        .await
-        .map_err(|e| Error::Imap(format!("rename {from} -> {to}: {e}")))?;
-    let _ = session.logout().await;
-    Ok(())
+    pool::with_session(config, |session| {
+        let from = from.to_string();
+        let to = to.to_string();
+        async move {
+            // Some servers refuse RENAME/DELETE of the currently selected
+            // mailbox. Fresh connections never had one selected; the pooled
+            // session might — park it on INBOX first to keep the old
+            // guarantee. Best-effort: a failed SELECT shouldn't block the op.
+            let _ = session.select("INBOX").await;
+            session
+                .rename(&from, &to)
+                .await
+                .map_err(|e| Error::Imap(format!("rename {from} -> {to}: {e}")))?;
+            Ok(())
+        }
+        .boxed()
+    })
+    .await
 }
 
 pub async fn delete_folder(config: &ImapConfig, path: &str) -> Result<()> {
-    let mut session = connect(config).await?;
-    session
-        .delete(path)
-        .await
-        .map_err(|e| Error::Imap(format!("delete {path}: {e}")))?;
-    let _ = session.logout().await;
-    Ok(())
+    pool::with_session(config, |session| {
+        let path = path.to_string();
+        async move {
+            // See rename_folder: never DELETE the selected mailbox.
+            let _ = session.select("INBOX").await;
+            session
+                .delete(&path)
+                .await
+                .map_err(|e| Error::Imap(format!("delete {path}: {e}")))?;
+            Ok(())
+        }
+        .boxed()
+    })
+    .await
 }
 
 pub async fn append_message(
@@ -310,8 +385,6 @@ pub async fn append_message(
     bytes: &[u8],
     flags: &[String],
 ) -> Result<()> {
-    let mut session = connect(config).await?;
-
     // async-imap 0.10 expects flags as a raw parenthesised IMAP list
     // (e.g. `(\Seen)`), not a slice. Build it only when we actually have
     // flags to avoid sending an empty `()` which some servers reject.
@@ -321,39 +394,50 @@ pub async fn append_message(
         Some(format!("({})", flags.join(" ")))
     };
 
-    session
-        .append(folder, flags_str.as_deref(), None, bytes)
-        .await
-        .map_err(|e| Error::Imap(format!("append to {folder}: {e}")))?;
-
-    let _ = session.logout().await;
-    Ok(())
+    pool::with_session(config, |session| {
+        let folder = folder.to_string();
+        let flags_str = flags_str.clone();
+        let bytes = bytes.to_vec();
+        async move {
+            session
+                .append(&folder, flags_str.as_deref(), None, &bytes)
+                .await
+                .map_err(|e| Error::Imap(format!("append to {folder}: {e}")))?;
+            Ok(())
+        }
+        .boxed()
+    })
+    .await
 }
 
 async fn fetch_raw_message(config: &ImapConfig, folder: &str, uid: u32) -> Result<Vec<u8>> {
-    let mut session = connect(config).await?;
-    session
-        .select(folder)
-        .await
-        .map_err(|e| Error::Imap(format!("select {folder}: {e}")))?;
+    pool::with_session(config, |session| {
+        let folder = folder.to_string();
+        async move {
+            session
+                .select(&folder)
+                .await
+                .map_err(|e| Error::Imap(format!("select {folder}: {e}")))?;
 
-    let mut stream = session
-        .uid_fetch(uid.to_string(), "BODY.PEEK[]")
-        .await
-        .map_err(|e| Error::Imap(format!("uid_fetch: {e}")))?;
+            let mut stream = session
+                .uid_fetch(uid.to_string(), "BODY.PEEK[]")
+                .await
+                .map_err(|e| Error::Imap(format!("uid_fetch: {e}")))?;
 
-    let mut raw: Option<Vec<u8>> = None;
-    while let Some(item) = stream.next().await {
-        let fetch = item.map_err(|e| Error::Imap(format!("fetch item: {e}")))?;
-        if let Some(body) = fetch.body() {
-            raw = Some(body.to_vec());
-            break;
+            let mut raw: Option<Vec<u8>> = None;
+            while let Some(item) = stream.next().await {
+                let fetch = item.map_err(|e| Error::Imap(format!("fetch item: {e}")))?;
+                if let Some(body) = fetch.body() {
+                    raw = Some(body.to_vec());
+                    // Keep draining so the FETCH completes cleanly on the wire
+                    // before the session goes back to the pool.
+                }
+            }
+            raw.ok_or_else(|| Error::Imap(format!("no body for UID {uid}")))
         }
-    }
-    drop(stream);
-    let _ = session.logout().await;
-
-    raw.ok_or_else(|| Error::Imap(format!("no body for UID {uid}")))
+        .boxed()
+    })
+    .await
 }
 
 fn summary_from(fetch: &async_imap::types::Fetch) -> MessageSummary {
