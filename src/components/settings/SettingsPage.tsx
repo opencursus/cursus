@@ -26,14 +26,19 @@ import { ipc } from "@/lib/ipc";
 import {
   deleteAccount,
   deleteRule,
+  deleteScheduledSend,
   listAccounts,
   listMessagesForFolder,
   listRules,
+  listScheduledSends,
   upsertRule,
   type StoredAccount,
   type StoredRule,
+  type StoredScheduledSend,
 } from "@/lib/db";
+import { useComposerStore } from "@/stores/composer";
 import type { RuleAction, RuleCondition, RuleField, RuleOp } from "@/lib/rules";
+import { fetchAvailableUpdate, REPO_URL } from "@/lib/updates";
 import { AccountForm } from "@/components/settings/AccountForm";
 import { ExportAccountsModal } from "@/components/settings/ExportAccountsModal";
 import { ImportAccountsModal } from "@/components/settings/ImportAccountsModal";
@@ -592,7 +597,119 @@ function GeneralSection() {
       </Row>
 
       <BulkIndexRow />
+      <OutboxRow />
     </>
+  );
+}
+
+function OutboxRow() {
+  const [entries, setEntries] = useState<StoredScheduledSend[]>([]);
+
+  async function refresh() {
+    try {
+      setEntries(await listScheduledSends());
+    } catch {
+      // Non-fatal — the row just shows as empty until the next open.
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  async function handleDelete(id: number) {
+    if (!window.confirm("Delete this queued message permanently?")) return;
+    await deleteScheduledSend(id).catch(() => {});
+    void refresh();
+  }
+
+  async function handleEdit(entry: StoredScheduledSend) {
+    let payload: {
+      to?: string[];
+      cc?: string[];
+      bcc?: string[];
+      subject?: string;
+      html?: string;
+      attachments?: unknown[];
+    };
+    try {
+      payload = JSON.parse(entry.payload_json) as typeof payload;
+    } catch {
+      toast.error("This entry is corrupted and can't be edited");
+      return;
+    }
+    await deleteScheduledSend(entry.id).catch(() => {});
+    if ((payload.attachments?.length ?? 0) > 0) {
+      toast.info("Attachments were not restored — re-add them before sending");
+    }
+    useComposerStore.getState().openComposeWith({
+      to: (payload.to ?? []).join(", "),
+      cc: (payload.cc ?? []).join(", "),
+      bcc: (payload.bcc ?? []).join(", "),
+      subject: payload.subject ?? "",
+      bodyHtml: payload.html ?? "<p></p>",
+    });
+    useUiStore.getState().closeSettings();
+  }
+
+  return (
+    <Row
+      label="Outbox"
+      hint="Messages waiting to go out — scheduled sends and mail queued while offline. Sending retries automatically every minute and when the connection returns."
+    >
+      {entries.length === 0 ? (
+        <span className="text-[12px] text-muted">Empty</span>
+      ) : (
+        <div className="flex flex-col gap-1.5 w-[360px]">
+          {entries.map((e) => {
+            let subject = "(no subject)";
+            let firstTo = "";
+            try {
+              const p = JSON.parse(e.payload_json) as {
+                subject?: string;
+                to?: string[];
+              };
+              if (p.subject?.trim()) subject = p.subject;
+              firstTo = p.to?.[0] ?? "";
+            } catch {
+              subject = "(corrupted entry)";
+            }
+            return (
+              <div
+                key={e.id}
+                className="flex items-center gap-2 rounded-md border border-soft bg-sunken px-2.5 py-1.5"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] text-primary truncate">{subject}</div>
+                  <div className="text-[11.5px] text-muted truncate">
+                    {firstTo}
+                    {firstTo ? " · " : ""}
+                    {new Date(e.scheduled_at * 1000).toLocaleString(undefined, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleEdit(e)}
+                  className="shrink-0 px-2 h-6 text-[11.5px] rounded border border-strong bg-raised hover:bg-hover text-secondary hover:text-primary"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(e.id)}
+                  className="shrink-0 px-2 h-6 text-[11.5px] rounded border border-strong bg-raised hover:bg-hover text-secondary hover:text-primary"
+                >
+                  Delete
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Row>
   );
 }
 
@@ -1208,68 +1325,17 @@ type UpdateState =
     }
   | { status: "error"; message: string };
 
-// Use the listing endpoint (per_page=1) instead of /releases/latest because
-// /latest excludes pre-releases. While we're shipping v0.1.x as previews,
-// this is the only way the checker can detect a newer version.
-const RELEASES_API =
-  "https://api.github.com/repos/opencursus/cursus/releases?per_page=1";
-const REPO_URL = "https://github.com/opencursus/cursus";
-
-function isNewerSemver(latest: string, current: string): boolean {
-  const a = latest.split(".").map((n) => Number(n) || 0);
-  const b = current.split(".").map((n) => Number(n) || 0);
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    if (x > y) return true;
-    if (x < y) return false;
-  }
-  return false;
-}
-
 function AboutSection() {
   const [update, setUpdate] = useState<UpdateState>({ status: "idle" });
 
   async function checkForUpdates() {
     setUpdate({ status: "checking" });
     try {
-      const res = await fetch(RELEASES_API, {
-        headers: { Accept: "application/vnd.github+json" },
-      });
-      if (!res.ok) {
-        setUpdate({
-          status: "error",
-          message: `GitHub returned ${res.status}`,
-        });
-        return;
-      }
-      const list = (await res.json()) as Array<{
-        tag_name?: string;
-        html_url?: string;
-        published_at?: string;
-      }>;
-      if (!Array.isArray(list) || list.length === 0) {
-        // No releases at all yet.
-        setUpdate({ status: "current", current: __APP_VERSION__ });
-        return;
-      }
-      const release = list[0];
-      if (!release) {
-        setUpdate({ status: "current", current: __APP_VERSION__ });
-        return;
-      }
-      const latest = String(release.tag_name ?? "").replace(/^v/, "");
-      const current = __APP_VERSION__;
-      if (latest && isNewerSemver(latest, current)) {
-        setUpdate({
-          status: "available",
-          current,
-          latest,
-          url: release.html_url ?? `${REPO_URL}/releases`,
-          publishedAt: release.published_at ?? "",
-        });
+      const available = await fetchAvailableUpdate();
+      if (available) {
+        setUpdate({ status: "available", ...available });
       } else {
-        setUpdate({ status: "current", current });
+        setUpdate({ status: "current", current: __APP_VERSION__ });
       }
     } catch (err) {
       setUpdate({ status: "error", message: String(err) });

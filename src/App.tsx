@@ -13,11 +13,13 @@ import {
   getAccountSecrets,
   listDueScheduledSends,
   listMessagesForFolder,
-  updateMessageFlags,
+  replaceMessageFlags,
   type DraftMode,
 } from "@/lib/db";
 import { getSnoozeUntil, isSnoozeFlag } from "@/lib/snooze";
 import { executeOutgoingSend, type SendPayload } from "@/lib/sender";
+import { registerOutboxDrain } from "@/lib/outbox";
+import { fetchAvailableUpdate } from "@/lib/updates";
 import { toast } from "@/stores/toasts";
 
 export default function App() {
@@ -255,19 +257,20 @@ export default function App() {
                 security: account.imap_security,
               } as const;
               const snoozeFlags = parsed.filter(isSnoozeFlag);
-              for (const f of snoozeFlags) {
-                await ipc
-                  .imapSetFlags(config, folder.path, r.imap_uid, [f], "remove")
-                  .catch(() => {});
-              }
-              // Also clear them from the local row so the UI re-surfaces the
-              // thread immediately, before the next sync round-trip.
+              await ipc.imapSetFlagsBulk(
+                config,
+                folder.path,
+                [r.imap_uid],
+                snoozeFlags,
+                "remove",
+              );
+              // Clear them from the local row too so the UI re-surfaces the
+              // thread on the next re-cohort instead of waiting for a full
+              // sync round-trip to confirm.
               const remaining = parsed.filter((f) => !isSnoozeFlag(f));
-              await updateMessageFlags(folder.id, r.imap_uid, {}).catch(() => {});
-              // updateMessageFlags doesn't take a flags blob; do a raw write
-              // by re-using upsertMessageSummary at next sync. For now the
-              // local copy still has the keyword until the server confirms.
-              void remaining;
+              await replaceMessageFlags(folder.id, r.imap_uid, remaining).catch(
+                (err) => console.warn("snooze checker: local flag clear failed", err),
+              );
             } catch (err) {
               console.warn("snooze checker: IMAP unset failed", err);
             }
@@ -285,15 +288,28 @@ export default function App() {
     };
   }, []);
 
-  // ── Scheduled-sends worker ──────────────────────────────────────────────
-  // Once a minute, drain the scheduled_sends table for entries whose deadline
-  // has passed and dispatch them through the same sender.ts pipeline as a
-  // normal send. Successful sends delete the row; failures keep it (and toast
-  // the user) so we can retry on the next tick rather than silently lose mail.
+  // ── Scheduled-sends / outbox worker ─────────────────────────────────────
+  // Once a minute — plus immediately when connectivity returns or a send
+  // path calls drainOutboxNow() — drain the scheduled_sends table for
+  // entries whose deadline has passed and dispatch them through the same
+  // sender.ts pipeline as a normal send. Successful sends delete the row;
+  // failures keep it so the next tick retries rather than losing mail.
+  // Failure toasts are throttled per row (first attempt, then every 10th)
+  // so an offline hour doesn't produce sixty error toasts.
   useEffect(() => {
     let cancelled = false;
+    let running = false;
+    let rerun = false;
+    const attempts = new Map<number, number>();
     async function tick() {
       if (cancelled) return;
+      // A drain request landing mid-run (two undo-sends back to back) marks
+      // rerun so the fresh row goes out right after, not on the next tick.
+      if (running) {
+        rerun = true;
+        return;
+      }
+      running = true;
       try {
         const due = await listDueScheduledSends(Math.floor(Date.now() / 1000));
         for (const entry of due) {
@@ -313,24 +329,71 @@ export default function App() {
               draftId: entry.draft_id,
             });
             await deleteScheduledSend(entry.id);
-            toast.success("Scheduled message sent");
+            attempts.delete(entry.id);
+            toast.success("Message sent");
           } catch (err) {
-            console.error("scheduled send failed", err);
-            toast.error(`Scheduled send failed: ${err}`);
-            // Leave the row in place; next tick retries. A future Settings
-            // page entry can offer manual cancel for stuck sends.
+            const n = (attempts.get(entry.id) ?? 0) + 1;
+            attempts.set(entry.id, n);
+            console.error(`outbox send failed (attempt ${n})`, err);
+            if (n === 1) {
+              toast.error(`Send failed — kept in Outbox, will retry: ${err}`);
+            } else if (n % 10 === 0) {
+              toast.error(`Still can't send (${n} attempts): ${err}`);
+            }
+            // Row stays; Settings → Outbox offers manual cancel/edit.
           }
         }
       } catch (err) {
         console.warn("scheduled sends worker tick failed", err);
+      } finally {
+        running = false;
+        if (rerun && !cancelled) {
+          rerun = false;
+          void tick();
+        }
       }
     }
     const id = window.setInterval(tick, 60_000);
+    const onOnline = () => void tick();
+    window.addEventListener("online", onOnline);
+    registerOutboxDrain(() => void tick());
     void tick();
     return () => {
       cancelled = true;
       window.clearInterval(id);
+      window.removeEventListener("online", onOnline);
+      registerOutboxDrain(null);
     };
+  }, []);
+
+  // ── Startup update check ────────────────────────────────────────────────
+  // Portable-exe distribution has no installer-driven updater, so once per
+  // launch (delayed so it never competes with the first sync) we compare the
+  // newest GitHub release against the running version and offer the download
+  // page. Failures are silent — the About section has a manual check.
+  useEffect(() => {
+    const id = window.setTimeout(async () => {
+      try {
+        const update = await fetchAvailableUpdate();
+        if (!update) return;
+        toast.push({
+          kind: "info",
+          message: `Cursus ${update.latest} is available (you have ${update.current}).`,
+          durationMs: 15000,
+          action: {
+            label: "Download",
+            onClick: () => {
+              void import("@tauri-apps/plugin-opener").then(({ openUrl }) =>
+                openUrl(update.url),
+              );
+            },
+          },
+        });
+      } catch {
+        // Offline or rate-limited — try again next launch.
+      }
+    }, 15_000);
+    return () => window.clearTimeout(id);
   }, []);
 
   return <Shell />;
