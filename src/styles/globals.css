@@ -218,3 +218,24 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 .fade-in { animation: fade-in 120ms ease-out both; }
+
+/* Rich-text editor surface — shared by the composer and the signature editor
+   in Settings, so both render a draft the same way. */
+.cursus-editor p { margin: 0 0 0.6em 0; }
+.compose-compact .cursus-editor p { margin: 0; }
+.cursus-editor blockquote {
+  border-left: 3px solid var(--border-strong);
+  margin: 0.6em 0;
+  padding: 0 0 0 12px;
+  color: var(--fg-secondary);
+}
+.cursus-editor ul, .cursus-editor ol { margin: 0 0 0.6em 1.2em; padding: 0; }
+.cursus-editor h1, .cursus-editor h2, .cursus-editor h3 { margin: 0.8em 0 0.4em; font-weight: 600; }
+.cursus-editor a { color: var(--accent); text-decoration: none; }
+.cursus-editor a:hover { text-decoration: underline; }
+.cursus-editor code {
+  background: rgba(128, 128, 128, 0.12);
+  padding: 1px 4px; border-radius: 3px; font-size: 0.92em;
+}
+.cursus-editor img { max-width: 100%; height: auto; }
+.cursus-editor img.ProseMirror-selectednode { outline: 2px solid var(--accent); }

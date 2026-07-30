@@ -44,7 +44,9 @@ export function AccountForm({ editing, onSaved, onCancel }: Props) {
   const [email, setEmail] = useState(editing?.email ?? "");
   const [displayName, setDisplayName] = useState(editing?.display_name ?? "");
   const [color, setColor] = useState(editing?.color ?? COLORS[0]!);
-  const [signature, setSignature] = useState(editing?.signature_html ?? "");
+  // Edited in Settings → Signature, not here. Carried through so saving the
+  // account form doesn't blank the column out from under it.
+  const signature = editing?.signature_html ?? "";
 
   const [imapHost, setImapHost] = useState(editing?.imap_host ?? "");
   const [imapPort, setImapPort] = useState(editing?.imap_port ?? 993);
@@ -497,23 +499,6 @@ export function AccountForm({ editing, onSaved, onCancel }: Props) {
           </Button>
           <TestMessage state={smtpTest} />
         </div>
-      </section>
-
-      <section className="flex flex-col gap-4">
-        <SectionTitle>Signature</SectionTitle>
-        <Field
-          label="Appended automatically when composing or replying. Plain text or simple HTML — no styling beyond what you write here."
-        >
-          <textarea
-            value={signature}
-            onChange={(e) => setSignature(e.target.value)}
-            placeholder={"— \nYour Name\nyour@email"}
-            rows={5}
-            spellCheck={false}
-            className="w-full rounded-md border bg-transparent px-3 py-2 text-[12.5px] font-mono leading-snug text-primary placeholder:text-muted outline-none focus:border-[color:var(--accent)]"
-            style={{ borderColor: "var(--border-strong)" }}
-          />
-        </Field>
       </section>
 
       {saveError && (

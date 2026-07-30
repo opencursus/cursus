@@ -174,6 +174,7 @@ interface AccountsState {
   renameFolder: (accountId: number, from: string, to: string) => Promise<void>;
   deleteFolder: (accountId: number, path: string) => Promise<void>;
   adjustFolderUnread: (folderId: number, delta: number) => void;
+  setAccountSignature: (accountId: number, html: string | null) => void;
   setActiveAccount: (id: number | null) => void;
   setActiveFolder: (id: number | null) => void;
 }
@@ -460,6 +461,16 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         f.id === folderId
           ? { ...f, unreadCount: Math.max(0, (f.unreadCount ?? 0) + delta) }
           : f,
+      ),
+    }));
+  },
+
+  // Patch in place rather than calling loadAccounts — the composer only needs
+  // the new signature, and a full reload would re-LIST every folder over IMAP.
+  setAccountSignature: (accountId, html) => {
+    set((state) => ({
+      accounts: state.accounts.map((a) =>
+        a.id === accountId ? { ...a, signatureHtml: html } : a,
       ),
     }));
   },

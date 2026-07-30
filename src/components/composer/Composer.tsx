@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import type { EditorView } from "@tiptap/pm/view";
 import {
   X,
   Send,
@@ -44,6 +43,7 @@ import {
 import { isTransientSendError } from "@/lib/sender";
 import { drainOutboxNow } from "@/lib/outbox";
 import { buildOutgoingBody } from "@/lib/inlineImages";
+import { insertClipboardImages } from "@/lib/editorImages";
 import { RecipientsField } from "@/components/composer/RecipientsField";
 import {
   ipc,
@@ -866,26 +866,6 @@ export function Composer() {
         )}
       </div>
 
-      <style>{`
-        .cursus-editor p { margin: 0 0 0.6em 0; }
-        .compose-compact .cursus-editor p { margin: 0; }
-        .cursus-editor blockquote {
-          border-left: 3px solid var(--border-strong);
-          margin: 0.6em 0;
-          padding: 0 0 0 12px;
-          color: var(--fg-secondary);
-        }
-        .cursus-editor ul, .cursus-editor ol { margin: 0 0 0.6em 1.2em; padding: 0; }
-        .cursus-editor h1, .cursus-editor h2, .cursus-editor h3 { margin: 0.8em 0 0.4em; font-weight: 600; }
-        .cursus-editor a { color: var(--accent); text-decoration: none; }
-        .cursus-editor a:hover { text-decoration: underline; }
-        .cursus-editor code {
-          background: rgba(128,128,128,0.12);
-          padding: 1px 4px; border-radius: 3px; font-size: 0.92em;
-        }
-        .cursus-editor img { max-width: 100%; height: auto; }
-        .cursus-editor img.ProseMirror-selectednode { outline: 2px solid var(--accent); }
-      `}</style>
     </>
   );
 }
@@ -1035,32 +1015,6 @@ function HeaderIconButton({
 function basename(p: string): string {
   const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
   return idx >= 0 ? p.slice(idx + 1) : p;
-}
-
-const MAX_INLINE_IMAGE_BYTES = 5 * 1024 * 1024;
-
-/** Insert pasted/dropped image files as base64 data URIs. Returns true when
- *  image files were handled so TipTap skips its default paste/drop behavior.
- *  The FileReader is async, so nodes land via the view rather than the
- *  synchronous handler return path. */
-function insertClipboardImages(view: EditorView, data: DataTransfer | null): boolean {
-  const files = Array.from(data?.files ?? []).filter((f) => f.type.startsWith("image/"));
-  if (files.length === 0) return false;
-  for (const file of files) {
-    if (file.size > MAX_INLINE_IMAGE_BYTES) {
-      toast.error(`Image too large to embed (max 5 MB): ${file.name || "pasted image"}`);
-      continue;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const src = reader.result;
-      if (typeof src !== "string") return;
-      const node = view.state.schema.nodes.image?.create({ src });
-      if (node) view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView());
-    };
-    reader.readAsDataURL(file);
-  }
-  return true;
 }
 
 /** When compact spacing is on, inline `margin:0` on every paragraph so the

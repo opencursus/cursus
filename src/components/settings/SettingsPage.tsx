@@ -14,6 +14,7 @@ import {
   Download,
   Upload,
   MoreHorizontal,
+  PenLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
@@ -42,13 +43,22 @@ import { fetchAvailableUpdate, REPO_URL } from "@/lib/updates";
 import { AccountForm } from "@/components/settings/AccountForm";
 import { ExportAccountsModal } from "@/components/settings/ExportAccountsModal";
 import { ImportAccountsModal } from "@/components/settings/ImportAccountsModal";
+import { SignatureSection } from "@/components/settings/SignatureSection";
 import type { Theme, ReadingPane } from "@/types";
 
-type SectionId = "accounts" | "appearance" | "general" | "rules" | "keyboard" | "about";
+type SectionId =
+  | "accounts"
+  | "signature"
+  | "appearance"
+  | "general"
+  | "rules"
+  | "keyboard"
+  | "about";
 type AccountsMode = "list" | "form";
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: React.ElementType }> = [
   { id: "accounts", label: "Accounts", icon: MailIcon },
+  { id: "signature", label: "Signature", icon: PenLine },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "general", label: "General", icon: Sliders },
   { id: "rules", label: "Rules", icon: Filter },
@@ -84,6 +94,7 @@ export function SettingsPage() {
         <div className="overflow-y-auto">
           <div className="px-10 py-8 max-w-3xl">
             {section === "accounts" && <AccountsSection />}
+            {section === "signature" && <SignatureSection />}
             {section === "appearance" && <AppearanceSection />}
             {section === "general" && <GeneralSection />}
             {section === "rules" && <RulesSection />}

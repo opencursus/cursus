@@ -236,19 +236,25 @@ function buildForwardQuote(
   ].join("");
 }
 
+const BLOCK_TAG_RE =
+  /<(p|div|table|tbody|thead|tr|td|th|ul|ol|li|blockquote|h[1-6]|hr|pre|section|article|figure|center)\b/i;
+
 /**
- * Render the per-account signature as a paragraph block. We accept either
- * raw HTML (kept as-is) or plain text (escaped + newlines → <br>). A
- * pragmatic check: if it contains `<` we treat it as HTML.
+ * Render the per-account signature as a block. Plain text is escaped with
+ * newlines turned into <br>; HTML is kept as authored.
+ *
+ * The wrapping paragraph is only added around purely inline markup — the
+ * signature editor emits `<p>` blocks, and `<p><p>…</p></p>` (or worse,
+ * `<p><table>…</table></p>`) is invalid, so the browser splits it apart and
+ * the signature loses its shape.
  */
-function signatureBlock(raw: string | null | undefined): string {
+export function signatureBlock(raw: string | null | undefined): string {
   if (!raw || !raw.trim()) return "";
   const trimmed = raw.trim();
-  const isHtml = /<\w+/.test(trimmed);
-  const inner = isHtml
-    ? trimmed
-    : escapeHtml(trimmed).replace(/\n/g, "<br>");
-  return `<p>${inner}</p>`;
+  if (!/<\w/.test(trimmed)) {
+    return `<p>${escapeHtml(trimmed).replace(/\n/g, "<br>")}</p>`;
+  }
+  return BLOCK_TAG_RE.test(trimmed) ? trimmed : `<p>${trimmed}</p>`;
 }
 
 /**

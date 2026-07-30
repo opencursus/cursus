@@ -238,6 +238,20 @@ export async function updateAccount(id: number, input: AccountInput): Promise<vo
   }
 }
 
+/** Signature-only update. Deliberately narrow: the full `updateAccount` above
+ *  rewrites every credential column and re-writes the keychain entries, which
+ *  the signature editor has no business doing. */
+export async function updateAccountSignature(
+  id: number,
+  html: string | null,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE accounts SET signature_html = $1, updated_at = unixepoch() WHERE id = $2`,
+    [html?.trim() || null, id],
+  );
+}
+
 // --- Backup bundle (export/import accounts) ------------------------------
 
 export interface AccountBundleEntry {
