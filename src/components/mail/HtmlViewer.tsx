@@ -4,6 +4,21 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { ImageOff } from "lucide-react";
 import { useUiStore } from "@/stores/ui";
 import { flog } from "@/lib/logger";
+import { harmonizeMailColors } from "@/lib/mailColors";
+
+// Resolves a theme token to a concrete `rgb(...)`. Reading the custom property
+// straight off the root can hand back another `var(...)` reference, which is
+// meaningless inside the iframe (it has no stylesheet of ours) and unparseable
+// by the colour pass — letting the browser compute it sidesteps both.
+function resolveToken(name: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = `var(${name})`;
+  probe.style.display = "none";
+  document.body.appendChild(probe);
+  const value = getComputedStyle(probe).color;
+  probe.remove();
+  return value;
+}
 
 interface Props {
   html: string;
@@ -68,6 +83,7 @@ export function HtmlViewer({ html, uid }: Props) {
   const remoteImages = useUiStore((s) => s.remoteImages);
   const allowedImageUids = useUiStore((s) => s.allowedImageUids);
   const allowImagesForUid = useUiStore((s) => s.allowImagesForUid);
+  const theme = useUiStore((s) => s.theme);
 
   const allowed =
     remoteImages === "always" || allowedImageUids.includes(uid);
@@ -90,9 +106,17 @@ export function HtmlViewer({ html, uid }: Props) {
     const doc = iframe.contentDocument;
     if (!doc) return;
 
-    const fg = getComputedStyle(document.documentElement).getPropertyValue("--fg-primary");
-    const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg-raised");
-    const linkColor = getComputedStyle(document.documentElement).getPropertyValue("--accent");
+    const fg = resolveToken("--fg-primary");
+    const bg = resolveToken("--bg-raised");
+    const linkColor = resolveToken("--accent");
+
+    // Senders write for a white page. Re-point the colours that would land
+    // unreadably on our surface before the document is handed to the iframe.
+    const body = harmonizeMailColors(clean, {
+      background: bg,
+      text: fg,
+      link: linkColor,
+    });
 
     doc.open();
     doc.write(`<!doctype html>
@@ -107,25 +131,25 @@ export function HtmlViewer({ html, uid }: Props) {
         font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
         font-size: 14px;
         line-height: 1.6;
-        color: ${fg.trim()};
-        background: ${bg.trim()};
+        color: ${fg};
+        background: ${bg};
         padding: 24px 28px;
         word-wrap: break-word;
       }
-      a { color: ${linkColor.trim()}; text-decoration: none; }
+      a { color: ${linkColor}; text-decoration: none; }
       a:hover { text-decoration: underline; }
       img { max-width: 100%; height: auto; }
       blockquote {
         border-left: 3px solid rgba(128, 128, 128, 0.25);
         margin: 0;
         padding: 0 0 0 16px;
-        color: ${fg.trim()};
+        color: ${fg};
         opacity: 0.8;
       }
       pre { overflow-x: auto; background: rgba(128,128,128,0.08); padding: 10px; border-radius: 6px; }
     </style>
   </head>
-  <body>${clean}</body>
+  <body>${body}</body>
 </html>`);
     doc.close();
 
@@ -165,7 +189,9 @@ export function HtmlViewer({ html, uid }: Props) {
     return () => {
       doc.removeEventListener("click", onClick, true);
     };
-  }, [clean]);
+    // `theme` is not read directly — it drives the token values above, so the
+    // document has to be rewritten whenever it changes.
+  }, [clean, theme]);
 
   const showBanner = remoteImages === "ask" && blocked > 0 && !allowed;
 
